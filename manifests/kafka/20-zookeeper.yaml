@@ -1,0 +1,67 @@
+# Zookeeper for Kafka
+# Single-node deployment for k3s-homelab
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: kafka
+spec:
+  clusterIP: None
+  selector:
+    app: zookeeper
+  ports:
+    - port: 2181
+      name: client
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: kafka
+spec:
+  serviceName: zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      # CUSTOMIZE: Change to match your target node
+      # k3s-homelab: k3s-vm2
+      # AWS EKS: Remove or use different selector
+      nodeSelector:
+        kubernetes.io/hostname: k3s-vm2
+      
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+          ports:
+            - containerPort: 2181
+              name: client
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/zookeeper/data
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # CUSTOMIZE: Change storage class for different environments
+        # k3s-homelab: local-path
+        # AWS EKS: gp3 or similar
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

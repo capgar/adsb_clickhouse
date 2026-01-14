@@ -1,0 +1,154 @@
+# Simplified 30-clickhouse.yaml (Strict Schema Compatible)
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: adsb-data
+  namespace: clickhouse
+spec:
+  configuration:
+    zookeeper:
+      nodes:
+        - host: adsb-keeper-headless.clickhouse.svc.cluster.local
+          port: 2181
+      root: /clickhouse/adsb-data
+    
+    clusters:
+      - name: adsb-data
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+
+    users:
+      default/networks/ip:
+        - "127.0.0.1"
+      admin/password_sha256_hex: 2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9
+      admin/networks/ip:
+        - "::/0"
+      admin/access_management: "1"
+      admin/named_collection_control: "1"
+      admin/show_named_collections_secrets: "1"
+
+    files:
+      kafka_collections.xml: |
+        <clickhouse>
+            <named_collections>
+                <kafka_local>
+                    <!-- ClickHouse Kafka engine parameters -->
+                    <kafka_broker_list>lab.apgar.us:30192</kafka_broker_list>
+                    <kafka_topic_list>flights-local</kafka_topic_list>
+                    <kafka_group_name>clickhouse-lab-local</kafka_group_name>
+                    <kafka_format>JSONEachRow</kafka_format>
+                    <!-- Kafka extended configuration (librdkafka settings) -->
+                    <kafka_skip_broken_messages>100</kafka_skip_broken_messages>
+                    <kafka>
+                        <security_protocol>SSL</security_protocol>
+                        <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
+                        <ssl_certificate_location>/etc/clickhouse-kafka-tls/client.crt</ssl_certificate_location>
+                        <ssl_key_location>/etc/clickhouse-kafka-tls/client.key</ssl_key_location>
+                        <session_timeout_ms>60000</session_timeout_ms>
+                        <max_poll_interval_ms>300000</max_poll_interval_ms>
+                        <heartbeat_interval_ms>3000</heartbeat_interval_ms>
+                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <debug>all</debug>
+                    </kafka>
+                </kafka_local>
+                <kafka_regional>
+                    <kafka_broker_list>lab.apgar.us:30192</kafka_broker_list>
+                    <kafka_topic_list>flights-regional</kafka_topic_list>
+                    <kafka_group_name>clickhouse-lab-regional</kafka_group_name>
+                    <kafka_format>JSONEachRow</kafka_format>
+                    <kafka_skip_broken_messages>100</kafka_skip_broken_messages>
+                    <kafka>
+                        <security_protocol>SSL</security_protocol>
+                        <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
+                        <ssl_certificate_location>/etc/clickhouse-kafka-tls/client.crt</ssl_certificate_location>
+                        <ssl_key_location>/etc/clickhouse-kafka-tls/client.key</ssl_key_location>
+                        <session_timeout_ms>60000</session_timeout_ms>
+                        <max_poll_interval_ms>300000</max_poll_interval_ms>
+                        <heartbeat_interval_ms>3000</heartbeat_interval_ms>
+                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <debug>all</debug>
+                    </kafka>
+                </kafka_regional>
+                <kafka_global>
+                    <kafka_broker_list>lab.apgar.us:30192</kafka_broker_list>
+                    <kafka_topic_list>flights-global</kafka_topic_list>
+                    <kafka_group_name>clickhouse-lab-global</kafka_group_name>
+                    <kafka_format>JSONEachRow</kafka_format>
+                    <kafka_skip_broken_messages>100</kafka_skip_broken_messages>
+                    <kafka>
+                        <security_protocol>SSL</security_protocol>
+                        <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
+                        <ssl_certificate_location>/etc/clickhouse-kafka-tls/client.crt</ssl_certificate_location>
+                        <ssl_key_location>/etc/clickhouse-kafka-tls/client.key</ssl_key_location>
+                        <session_timeout_ms>60000</session_timeout_ms>
+                        <max_poll_interval_ms>300000</max_poll_interval_ms>
+                        <heartbeat_interval_ms>3000</heartbeat_interval_ms>
+                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <debug>all</debug>
+                    </kafka>
+                </kafka_global>
+            </named_collections>
+        </clickhouse>
+
+    profiles:
+      default/max_memory_usage: "4000000000"
+      default/joined_subquery_requires_alias: "0"
+
+  defaults:
+    templates:
+      podTemplate: clickhouse-pod
+      dataVolumeClaimTemplate: data-volume
+      logVolumeClaimTemplate: log-volume
+      serviceTemplate: external-service
+
+  templates:
+    podTemplates:
+      - name: clickhouse-pod
+        spec:
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
+          nodeSelector:
+            kubernetes.io/hostname: k3s-vm1
+          containers:
+            - name: clickhouse
+              image: altinity/clickhouse-server:25.3.8.10041.altinitystable
+              volumeMounts:
+                - name: kafka-tls-certs
+                  mountPath: /etc/clickhouse-kafka-tls
+                  readOnly: true
+          volumes:
+            - name: kafka-tls-certs
+              secret:
+                secretName: kafka-client-tls
+                defaultMode: 288
+
+    serviceTemplates:
+      - name: external-service
+        spec:
+          type: NodePort
+          ports:
+            - name: http
+              port: 8123
+              nodePort: 30123
+            - name: tcp
+              port: 9000
+              nodePort: 30900
+
+    volumeClaimTemplates:
+      - name: data-volume
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 100Gi
+      - name: log-volume
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 10Gi

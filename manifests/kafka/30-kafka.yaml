@@ -1,0 +1,157 @@
+# Kafka 3.9.0 with TLS External Access
+# Single-broker deployment for k3s-homelab
+#
+# Listeners:
+# - INTERNAL (9092): Plaintext for in-cluster communication (scrapers)
+# - EXTERNAL (9094): TLS + mTLS for external clients (ClickHouse)
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: kafka
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      name: internal
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external
+  namespace: kafka
+spec:
+  type: NodePort
+  selector:
+    app: kafka
+  ports:
+    # CUSTOMIZE: External port and NodePort
+    # k3s-homelab: 30192
+    # AWS EKS: Use LoadBalancer service type instead
+    - port: 9094
+      targetPort: 9094
+      nodePort: 30192
+      name: external
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: kafka
+spec:
+  serviceName: kafka-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      # CUSTOMIZE: Change to match your target node
+      # k3s-homelab: k3s-vm2
+      # AWS EKS: Remove or use different selector
+      nodeSelector:
+        kubernetes.io/hostname: k3s-vm2
+      
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx3G -Xms2G"
+            - name: KAFKA_OPTS
+              value: "-Djavax.net.debug=ssl"
+          
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              
+              # Generate server.properties inline
+              cat > /tmp/server.properties <<EOF
+              broker.id=0
+              zookeeper.connect=zookeeper.kafka.svc.cluster.local:2181
+              
+              # Listeners
+              listeners=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+              # CUSTOMIZE: External advertised listener hostname
+              # k3s-homelab: lab.apgar.us:30192
+              # AWS EKS: <load-balancer-dns>:9094
+              advertised.listeners=INTERNAL://kafka-0.kafka-headless.kafka.svc.cluster.local:9092,EXTERNAL://lab.apgar.us:30192
+              listener.security.protocol.map=INTERNAL:PLAINTEXT,EXTERNAL:SSL
+              inter.broker.listener.name=INTERNAL
+              
+              # External listener - TLS + mTLS
+              ssl.keystore.location=/etc/kafka/secrets/server.keystore.jks
+              ssl.keystore.password=changeit
+              ssl.key.password=changeit
+              ssl.truststore.location=/etc/kafka/secrets/server.truststore.jks
+              ssl.truststore.password=changeit
+              ssl.client.auth=required
+              
+              # Storage & Retention
+              # 8GB per partition * 4 eventual topics * 4 parts/topic = 128GB
+              log.dirs=/var/lib/kafka/data
+              log.retention.hours=168
+              log.retention.bytes=8589934592
+              log.segment.bytes=134217728
+              log.retention.check.interval.ms=300000
+              log.cleanup.policy=delete
+              
+              # Topic defaults
+              num.partitions=4
+              offsets.topic.replication.factor=1
+              default.replication.factor=1
+              min.insync.replicas=1
+              auto.create.topics.enable=true
+              EOF
+              
+              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+          
+          ports:
+            - containerPort: 9092
+              name: internal
+            - containerPort: 9094
+              name: external
+          
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+            - name: kafka-certs
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+          
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+      
+      volumes:
+        - name: kafka-certs
+          secret:
+            secretName: kafka-certs
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # CUSTOMIZE: Change storage class for different environments
+        # k3s-homelab: local-path
+        # AWS EKS: gp3 or similar
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 50Gi

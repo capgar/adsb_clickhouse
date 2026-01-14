@@ -1,0 +1,31 @@
+# ADS-B Scraper Configuration
+# 
+# This file is an EXAMPLE. Copy it to 01-configmap.yaml and customize for your environment.
+# 01-configmap.yaml is gitignored.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scraper-config
+  namespace: scrapers
+data:
+  # Kafka broker address (internal, plaintext)
+  KAFKA_BROKERS: "kafka-0.kafka-headless.kafka.svc.cluster.local:9092:9092"
+  
+  # Local ADS-B receiver endpoint
+  # CUSTOMIZE: Replace with your receiver's IP/hostname and port
+  LOCAL_URL: "http://<ADSB_RECEIVER>:8088/data/aircraft.json"
+  
+  # Regional API endpoint - airplanes.live
+  # CUSTOMIZE: Update lat/lon/radius for your location
+  # Format: https://api.airplanes.live/v2/point/LAT/LON/RADIUS_KM
+  # Radius in km (1.852 km = 1 nm)
+  REGIONAL_URL: "https://api.airplanes.live/v2/point/<LAT>/<LON>/<RADIUS>"
+  
+  # Global API endpoint - adsb.lol
+  GLOBAL_URL: "https://re-api.adsb.lol/?all"
+  
+  # Scrape intervals in seconds
+  LOCAL_INTERVAL: "2"
+  REGIONAL_INTERVAL: "15"
+  GLOBAL_INTERVAL: "60"

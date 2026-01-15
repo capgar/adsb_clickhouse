@@ -1,4 +1,4 @@
-### ADS-B Position Collection on ClickHouse
+# ADS-B Position Collection on ClickHouse
 
 ## Overview
 
@@ -35,13 +35,13 @@ This repository contains Kubernetes manifests for deploying:
 
 ## Prerequisites
 
-# Kubernetes Cluster
+### Kubernetes Cluster
 I chose k3s for my homelab, but this should work with any k8s-like distribution
 
-# Certificates
+### Certificates
 See certs/README.md for notes on certificate management for Clickhouse -> Kafka. Place these in the `certs/` directory (gitignored).
 
-### Container Image
+## Container Image
 Build and import the scraper image:
 ```bash
 cd ~/adsb-scraper

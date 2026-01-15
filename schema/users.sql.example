@@ -4,12 +4,12 @@
 
 -- Create Ingestion User (write access to all tables)
 CREATE USER IF NOT EXISTS adsb_ingest ON CLUSTER `adsb-data`
-    IDENTIFIED WITH sha256_password BY 'ingest123'
+    IDENTIFIED WITH sha256_password BY 'CHANGEME'
     SETTINGS PROFILE 'default';
 
 -- Create Query User (read-only access)
 CREATE USER IF NOT EXISTS adsb_query ON CLUSTER `adsb-data`
-    IDENTIFIED WITH sha256_password BY 'query123'
+    IDENTIFIED WITH sha256_password BY 'CHANGEME'
     SETTINGS PROFILE 'default';
 
 -- ============================================================================

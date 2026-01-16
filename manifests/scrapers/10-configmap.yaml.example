@@ -19,7 +19,6 @@ data:
   # Regional API endpoint - airplanes.live
   # CUSTOMIZE: Update lat/lon/radius for your location
   # Format: https://api.airplanes.live/v2/point/LAT/LON/RADIUS_KM
-  # Radius in km (1.852 km = 1 nm)
   REGIONAL_URL: "https://api.airplanes.live/v2/point/<LAT>/<LON>/<RADIUS>"
   
   # Global API endpoint - adsb.lol

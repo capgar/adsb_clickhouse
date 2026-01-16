@@ -41,11 +41,11 @@ class ConfigManager:
         
         # Source-specific configuration
         self.local_url = os.getenv('LOCAL_URL', 'http://adsb_receiver:8088/data/aircraft.json')
-        self.regional_url = os.getenv('REGIONAL_URL', 'https://api.airplanes.live/v2/point/39.00000/-77.00000/1852')
+        self.regional_url = os.getenv('REGIONAL_URL', 'https://api.airplanes.live/v2/point/39.00000/-77.00000/500')
         self.global_url = os.getenv('GLOBAL_URL', 'https://re-api.adsb.lol/?all')
         
         # Polling intervals
-        self.local_interval = int(os.getenv('LOCAL_INTERVAL', '5'))
+        self.local_interval = int(os.getenv('LOCAL_INTERVAL', '2'))
         self.regional_interval = int(os.getenv('REGIONAL_INTERVAL', '15'))
         self.global_interval = int(os.getenv('GLOBAL_INTERVAL', '30'))
         
@@ -142,7 +142,7 @@ class LocalScraper:
     def fetch(self) -> List[Dict[str, Any]]:
         """Fetch and parse local aircraft data"""
         try:
-            response = requests.get(self.url, timeout=5)
+            response = requests.get(self.url, timeout=3)
             response.raise_for_status()
             data = response.json()
             

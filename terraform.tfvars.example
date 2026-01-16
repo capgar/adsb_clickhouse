@@ -1,0 +1,36 @@
+# terraform.tfvars.example
+# Copy this to terraform.tfvars and customize as needed
+
+# AWS Region
+aws_region = "us-east-2"
+
+# EKS Cluster Configuration
+cluster_name    = "adsb-eks-lab"
+cluster_version = "1.31"
+
+# VPC Configuration
+vpc_cidr           = "10.0.0.0/"
+single_nat_gateway = true  # Set to false for multi-AZ HA (higher cost)
+
+# Node Groups Configuration
+node_groups = {
+  # On-demand node group
+  graviton_ondemand = {
+    instance_types = ["t4g.medium"]  # 2 vCPU, 4GB RAM, ARM64
+    capacity_type  = "ON_DEMAND"
+    min_size       = 3
+    max_size       = 5
+    desired_size   = 4  # Enough for 4 ClickHouse + 3 Keeper + 1 Grafana
+    disk_size      = 30
+  }
+
+  # Spot instance node group
+  # graviton_spot = {
+  #   instance_types = ["t4g.medium", "t4g.small"]  # Multiple types for better availability
+  #   capacity_type  = "SPOT"
+  #   min_size       = 2
+  #   max_size       = 6
+  #   desired_size   = 3
+  #   disk_size      = 30
+  # }
+}

@@ -1,5 +1,5 @@
-# ClickHouse Keeper
-# Single-node Keeper for ClickHouse coordination
+# 20-keeper.yaml (EKS version)
+# ClickHouse Keeper - 3 node cluster for HA
 
 ---
 apiVersion: v1
@@ -30,7 +30,7 @@ spec:
     clusters:
       - name: adsb-keeper
         layout:
-          replicasCount: 1
+          replicasCount: 3
     
     settings:
       logger/level: information
@@ -53,9 +53,8 @@ spec:
     podTemplates:
       - name: keeper-pod
         spec:
-          # CUSTOMIZE: Change to match your target node
-          nodeSelector:
-            kubernetes.io/hostname: k3s-vm1
+          # EKS: Remove nodeSelector to let scheduler place pods
+          # Pods will spread across AZs automatically with 3 replicas
           
           containers:
             - name: clickhouse-keeper
@@ -88,10 +87,8 @@ spec:
         spec:
           accessModes:
             - ReadWriteOnce
-          # CUSTOMIZE: Change storage class for different environments
-          # k3s-homelab: local-path
-          # AWS EKS: gp3 or similar
-          storageClassName: local-path
+          # EKS: Use gp3 storage class (created by Terraform)
+          storageClassName: gp3
           resources:
             requests:
               storage: 10Gi

@@ -21,16 +21,28 @@ manifests/scrapers/10-configmap.yaml
 !manifests/scrapers/10-configmap.yaml.example
 
 # Environment-specific schema files
-schema/*.sql
+schema/users*.sql
 
 # Schema example files
 !schema/*.sql.example
 
-# Local helper scripts
+# Helper scripts
 *.sh
 
-# Keeper scripts
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Working
+working/*
+old/*
 
 # Python
 __pycache__/
@@ -41,22 +53,37 @@ __pycache__/
 venv/
 ENV/
 
-# Terraform
-**/.terraform/
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
 *.tfstate
 *.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which might contain sensitive data
 *.tfvars
+*.tfvars.json
 !*.tfvars.example
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Ignore override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
-# OS / cruft
-.DS_Store
-Thumbs.db
-*.old
-/old/*
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Ignore lock files (include in git if using version pinning)
+# .terraform.lock.hcl
+
+# Kubernetes secret backups
+kafka-tls-secret.yaml
+
+# Output files
+outputs.txt

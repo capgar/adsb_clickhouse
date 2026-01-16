@@ -1,4 +1,6 @@
-# Simplified 30-clickhouse.yaml (Strict Schema Compatible)
+# 30-clickhouse.yaml (EKS version)
+# ClickHouse cluster: 2 shards x 2 replicas = 4 pods total
+
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
@@ -15,8 +17,8 @@ spec:
     clusters:
       - name: adsb-data
         layout:
-          shardsCount: 1
-          replicasCount: 1
+          shardsCount: 2     # Changed from 1
+          replicasCount: 2   # Changed from 1
 
     users:
       default/networks/ip:
@@ -119,8 +121,24 @@ spec:
             runAsUser: 101
             runAsGroup: 101
             fsGroup: 101
-          nodeSelector:
-            kubernetes.io/hostname: k3s-vm1
+          
+          # EKS: Remove nodeSelector to let scheduler place pods
+          # With 2 shards x 2 replicas, pods will spread across nodes/AZs
+          
+          # Optional: Use pod anti-affinity to spread replicas across nodes
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: clickhouse.altinity.com/chi
+                          operator: In
+                          values:
+                            - adsb-data
+                    topologyKey: kubernetes.io/hostname
+          
           containers:
             - name: clickhouse
               image: altinity/clickhouse-server:25.3.8.10041.altinitystable
@@ -128,6 +146,14 @@ spec:
                 - name: kafka-tls-certs
                   mountPath: /etc/clickhouse-kafka-tls
                   readOnly: true
+              resources:
+                requests:
+                  memory: "2Gi"
+                  cpu: "500m"
+                limits:
+                  memory: "3Gi"
+                  cpu: "1000m"
+          
           volumes:
             - name: kafka-tls-certs
               secret:
@@ -137,27 +163,30 @@ spec:
     serviceTemplates:
       - name: external-service
         spec:
-          type: NodePort
+          # EKS: Use LoadBalancer for external access (creates AWS ELB)
+          type: LoadBalancer
           ports:
             - name: http
               port: 8123
-              nodePort: 30123
+              targetPort: 8123
             - name: tcp
               port: 9000
-              nodePort: 30900
+              targetPort: 9000
 
     volumeClaimTemplates:
       - name: data-volume
         spec:
           accessModes: [ReadWriteOnce]
-          storageClassName: local-path
+          # EKS: Use gp3 storage class
+          storageClassName: gp3
           resources:
             requests:
               storage: 100Gi
+      
       - name: log-volume
         spec:
           accessModes: [ReadWriteOnce]
-          storageClassName: local-path
+          storageClassName: gp3
           resources:
             requests:
               storage: 10Gi

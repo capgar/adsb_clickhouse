@@ -43,6 +43,7 @@ Thumbs.db
 # Working
 working/*
 old/*
+*.old
 
 # Python
 __pycache__/

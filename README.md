@@ -3,20 +3,17 @@
 
 ## Overview
 
-Nearly every commercial airliner, as well as a large percentage of private, government, and even some military aircraft,
-constantly broadcast their position to a network of listening stations.  These stations, in turn, relay their position 
-reports to a variety of commercial and privately-run networks which aggregate and share the collected position data. At 
-any time, there may be over 12000 aircraft broadcasting their position through high frequency VHF signals. While many 
-websites which display ADS-B based position data, it is also possible to collect and aggregate that same data for free.
+At any time, there may be over 12000 aircraft broadcasting their position through high frequency VHF signals. 
+Nearly every commercial airliner and most civilian aircraft continuously stream their positions to a
+network of listening stations.  These stations, in turn, relay this data to a variety of commercial and 
+privately-run networks which aggregate and share the collected position data.
 
-The purpose of this project (in additon to meeting a professional need to be able to quickly deploy and test data 
-ingestion pipelines) is to explore the use of ClickHouse as an ideal repository for ADS-B data for storage, aggregation, 
-and analytics, potentially over very long timeframes.  At the time of the initial GitHub push, this project consists of a couple small VMs running on miscellaneous computers in my house, and hosting containers through K3s.  They are fed local aircraft position data which they stream from a Raspberry Pi mounted up in my attic.  The Pi is hooked up to a cheap VHF antenna, where it collects postition reports from the stream of internaitonal flights on their way in and out of Dulles International.  This data is, in turn, streamed out to a dozen or so public ADS-B aggregation sites.
-
-Additionally, I am currently scraping ADS-B data from two public providers, bringing in regional flight positions several 
-times per minute, and global positions (all tracked flights) less frequently.  More sources will be added, but at this 
-time, I'm keeping the volume low - all said, only a couple million position reports an hour.  But there are also 
-opportunities to increase that volume over time.
+This project leverages ClickHouse, an efficient and scalable columnmar database, to consume ADS-B data from a
+variety of sources.  In addition to collecting real-time signals from local commercial aircraft in my local area,
+it also polls worldwide position data from multiple online sources at varying polling rates.  The current
+volume is only a couple million position reports per hour, which easily runs in containers on home PCs.
+The ClickHouse cluster is being migrated to AWS, where it is being scaled up to handle larger load.  The core 
+data feeds (and Kafka pipeline) will continue to feed from my house.
 
 This repository contains Kubernetes manifests for deploying:
 - **ADS-B Scrapers**: A simple Python-based container which ingests position data from a variety of sources,
@@ -28,22 +25,22 @@ This repository contains Kubernetes manifests for deploying:
 - **Grafana + Prometheus**: Grafana provides live visibility into the various ADS-B data streams, including real-time world
   map views. Additional dashboards enabled through the Altinity Operator, provide system health and performance metrics.
 
+Additionally, Terraform automation for standing up infrastructure in EKS, and Ansible automation is being added.
+
 ## Prerequisites
 
-### Kubernetes Cluster
-I chose k3s for my homelab, but this should work with any k8s-like distribution
+### Kubernetes
+I chose k3s in my homelab, but this should work with any k8s-like distribution
 
-### Certificates
-See certs/README.md for notes on certificate management for Clickhouse -> Kafka. Place these in the `certs/` directory (gitignored).
-
-## Container Image
+### Container Image
 Build and import the scraper image:
 ```bash
 cd ~/adsb-scraper
 docker build -t adsb-scraper:latest .
 docker save adsb-scraper:latest | sudo k3s ctr images import -
 ```
-For AWS deployment, you'll want to push this to a registry (ECR or Docker Hub).
+For AWS deployment, you'll want to push this to a registry (ECR or Docker Hub)
 
 ## Setup
-Coming soon!
+Manual kubernetes manifest deployments, with automated EKS deployment of the Clickhouse and monitoring components in progress.
+Procedures coming shortly.

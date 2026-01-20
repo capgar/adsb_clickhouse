@@ -17,6 +17,7 @@ import json
 import requests
 from datetime import datetime, timezone
 from typing import List, Dict, Any
+from itertools import cycle
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
@@ -26,6 +27,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+class RateLimitException(Exception):
+    """Raised when API returns rate limit or forbidden response"""
+    pass
 
 class ConfigManager:
     """Manages configuration from environment variables"""
@@ -39,23 +44,53 @@ class ConfigManager:
             'k3s-vm1:30092,k3s-vm2:30093'
         ).split(',')
         
-        # Source-specific configuration
-        self.local_url = os.getenv('LOCAL_URL', 'http://adsb_receiver:8088/data/aircraft.json')
-        self.regional_url = os.getenv('REGIONAL_URL', 'https://api.airplanes.live/v2/point/39.00000/-77.00000/500')
-        self.global_url = os.getenv('GLOBAL_URL', 'https://re-api.adsb.lol/?all')
+        # Source-specific configuration - now supports multiple URLs
+        self.local_urls = self._parse_urls('LOCAL_URLS', ['http://adsb_receiver:8088/data/aircraft.json'])
+        self.regional_urls = self._parse_urls('REGIONAL_URLS', ['https://api.airplanes.live/v2/point/39.00000/-77.00000/463'])
+        self.global_urls = self._parse_urls('GLOBAL_URLS', ['https://re-api.adsb.lol/?all'])
         
         # Polling intervals
         self.local_interval = int(os.getenv('LOCAL_INTERVAL', '2'))
         self.regional_interval = int(os.getenv('REGIONAL_INTERVAL', '15'))
         self.global_interval = int(os.getenv('GLOBAL_INTERVAL', '30'))
         
+        # Rate limiting configuration
+        self.startup_settle_time = int(os.getenv('STARTUP_SETTLE_TIME', '15'))
+        self.post_kafka_settle_time = int(os.getenv('POST_KAFKA_SETTLE_TIME', '10'))
+        self.max_consecutive_errors = int(os.getenv('MAX_CONSECUTIVE_ERRORS', '10'))
+        
         self.validate()
+    
+    def _parse_urls(self, env_var: str, default: List[str]) -> List[str]:
+        """Parse URLs from environment variable (JSON array or comma-separated)"""
+        urls_str = os.getenv(env_var)
+        if not urls_str:
+            return default
+        
+        # Try parsing as JSON array first
+        try:
+            urls = json.loads(urls_str)
+            if isinstance(urls, list):
+                return [url.strip() for url in urls if url.strip()]
+        except json.JSONDecodeError:
+            pass
+        
+        # Fall back to comma-separated
+        return [url.strip() for url in urls_str.split(',') if url.strip()]
     
     def validate(self):
         """Validate configuration"""
         valid_sources = ['local', 'regional', 'global']
         if self.source_type not in valid_sources:
             raise ValueError(f"SOURCE_TYPE must be one of {valid_sources}")
+        
+        # Validate that we have at least one URL for the selected source
+        if self.source_type == 'local' and not self.local_urls:
+            raise ValueError("LOCAL_URLS must contain at least one URL")
+        if self.source_type == 'regional' and not self.regional_urls:
+            raise ValueError("REGIONAL_URLS must contain at least one URL")
+        if self.source_type == 'global' and not self.global_urls:
+            raise ValueError("GLOBAL_URLS must contain at least one URL")
 
 class KafkaPublisher:
     """Handles publishing to Kafka"""
@@ -137,12 +172,26 @@ class LocalScraper:
     
     def __init__(self, config: ConfigManager):
         self.config = config
-        self.url = config.local_url
+        self.urls = config.local_urls
+        self.url_cycle = cycle(self.urls)
+        logger.info(f"Initialized local scraper with {len(self.urls)} URL(s): {self.urls}")
     
     def fetch(self) -> List[Dict[str, Any]]:
         """Fetch and parse local aircraft data"""
+        url = next(self.url_cycle)
+        logger.info(f"Fetching from local URL: {url}")
+        
         try:
-            response = requests.get(self.url, timeout=3)
+            response = requests.get(url, timeout=3)
+            
+            # Check for rate limiting or forbidden responses
+            if response.status_code == 429:
+                logger.warning(f"Rate limited (429) from {url}")
+                raise RateLimitException(f"Rate limited by {url}")
+            elif response.status_code == 403:
+                logger.warning(f"Forbidden (403) from {url}")
+                raise RateLimitException(f"Forbidden response from {url}")
+            
             response.raise_for_status()
             data = response.json()
             
@@ -206,28 +255,45 @@ class LocalScraper:
             
             return aircraft_list
         
+        except RateLimitException:
+            # Re-raise rate limit exceptions
+            raise
         except Exception as e:
-            logger.error(f"Error fetching local data: {e}")
-            return []
+            logger.error(f"Error fetching local data from {url}: {e}")
+            raise
 
 class RegionalScraper:
-    """Scrapes regional (distance-bounded) data from airplanes.live regional API"""
+    """Scrapes from regional public APIs (airplanes.live, adsb.one, etc.)"""
     
     def __init__(self, config: ConfigManager):
         self.config = config
-        self.url = config.regional_url
+        self.urls = config.regional_urls
+        self.url_cycle = cycle(self.urls)
+        logger.info(f"Initialized regional scraper with {len(self.urls)} URL(s): {self.urls}")
     
     def fetch(self) -> List[Dict[str, Any]]:
         """Fetch and parse regional aircraft data"""
+        url = next(self.url_cycle)
+        logger.info(f"Fetching from regional URL: {url}")
+        
         try:
-            response = requests.get(self.url, timeout=5)
+            response = requests.get(url, timeout=10)
+            
+            # Check for rate limiting or forbidden responses
+            if response.status_code == 429:
+                logger.warning(f"Rate limited (429) from {url}")
+                raise RateLimitException(f"Rate limited by {url}")
+            elif response.status_code == 403:
+                logger.warning(f"Forbidden (403) from {url}")
+                raise RateLimitException(f"Forbidden response from {url}")
+            
             response.raise_for_status()
             data = response.json()
             
             aircraft_list = []
             for ac in data.get('ac', []):
                 # Skip aircraft without position
-                if ac.get('lat') is None or ac.get('lon') is None:
+                if 'lat' not in ac or 'lon' not in ac:
                     continue
                 
                 aircraft = {
@@ -285,21 +351,38 @@ class RegionalScraper:
             
             return aircraft_list
         
+        except RateLimitException:
+            # Re-raise rate limit exceptions
+            raise
         except Exception as e:
-            logger.error(f"Error fetching regional data: {e}")
-            return []
+            logger.error(f"Error fetching regional data from {url}: {e}")
+            raise
 
 class GlobalScraper:
     """Scrapes all current data from adsb.lol global API"""
     
     def __init__(self, config: ConfigManager):
         self.config = config
-        self.url = config.global_url
+        self.urls = config.global_urls
+        self.url_cycle = cycle(self.urls)
+        logger.info(f"Initialized global scraper with {len(self.urls)} URL(s): {self.urls}")
     
     def fetch(self) -> List[Dict[str, Any]]:
         """Fetch and parse global aircraft data"""
+        url = next(self.url_cycle)
+        logger.info(f"Fetching from global URL: {url}")
+        
         try:
-            response = requests.get(self.url, timeout=10)
+            response = requests.get(url, timeout=10)
+            
+            # Check for rate limiting or forbidden responses
+            if response.status_code == 429:
+                logger.warning(f"Rate limited (429) from {url}")
+                raise RateLimitException(f"Rate limited by {url}")
+            elif response.status_code == 403:
+                logger.warning(f"Forbidden (403) from {url}")
+                raise RateLimitException(f"Forbidden response from {url}")
+            
             response.raise_for_status()
             data = response.json()
             
@@ -362,20 +445,28 @@ class GlobalScraper:
             
             return aircraft_list
         
+        except RateLimitException:
+            # Re-raise rate limit exceptions
+            raise
         except Exception as e:
-            logger.error(f"Error fetching global data: {e}")
-            return []
+            logger.error(f"Error fetching global data from {url}: {e}")
+            raise
 
 def main():
     """Main scraper loop with infrastructure guards"""
     config = ConfigManager()
     
     # Startup Settle: Prevents rapid-fire hits if K8s restarts the pod
-    time.sleep(15)
+    logger.info(f"Initial startup settle: sleeping {config.startup_settle_time}s")
+    time.sleep(config.startup_settle_time)
 
     # Connect to Kafka before defining the scraper
     # Ensures we don't collect data we can't send
     publisher = KafkaPublisher(config)
+    
+    # Additional settle time after Kafka connection to ensure minimum time between restarts
+    logger.info(f"Post-Kafka settle: sleeping {config.post_kafka_settle_time}s")
+    time.sleep(config.post_kafka_settle_time)
 
     # Initialize appropriate scraper
     if config.source_type == 'local':
@@ -397,11 +488,17 @@ def main():
     logger.info(f"Starting {config.source_type} scraper (interval: {interval}s, topic: {topic})")
     
     error_count = 0
-    max_errors = 10
+    rate_limit_backoff = 0
     
     try:
         while True:
             try:
+                # Apply rate limit backoff if we've been rate limited
+                if rate_limit_backoff > 0:
+                    logger.info(f"Rate limit backoff: sleeping {rate_limit_backoff}s")
+                    time.sleep(rate_limit_backoff)
+                    rate_limit_backoff = 0
+                
                 data = scraper.fetch()
                 
                 if data:
@@ -412,14 +509,31 @@ def main():
                 
                 time.sleep(interval)
             
+            except RateLimitException as e:
+                # Special handling for rate limit errors
+                error_count += 1
+                logger.error(f"Rate limit error: {e}")
+                
+                # Exponential backoff for rate limiting, but cap at 5 minutes
+                rate_limit_backoff = min(interval * (2 ** error_count), 300)
+                logger.warning(f"Will apply {rate_limit_backoff}s backoff on next iteration")
+                
+                if error_count >= config.max_consecutive_errors:
+                    logger.error(f"Too many consecutive rate limit errors ({config.max_consecutive_errors}), exiting")
+                    break
+                
+                # Sleep the normal interval before next attempt
+                time.sleep(interval)
+            
             except Exception as e:
                 error_count += 1
                 logger.error(f"Error in main loop: {e}")
                 
-                if error_count >= max_errors:
-                    logger.error(f"Too many consecutive errors ({max_errors}), exiting")
+                if error_count >= config.max_consecutive_errors:
+                    logger.error(f"Too many consecutive errors ({config.max_consecutive_errors}), exiting")
                     break
                 
+                # Exponential backoff for general errors, capped at 5 minutes
                 sleep_time = min(interval * (2 ** error_count), 300)
                 logger.info(f"Sleeping {sleep_time}s before retry...")
                 time.sleep(sleep_time)

@@ -17,8 +17,8 @@ spec:
     clusters:
       - name: adsb-data
         layout:
-          shardsCount: 2     # Changed from 1
-          replicasCount: 2   # Changed from 1
+          shardsCount: 2
+          replicasCount: 2
 
     users:
       default/networks/ip:
@@ -54,7 +54,7 @@ spec:
                         <session_timeout_ms>60000</session_timeout_ms>
                         <max_poll_interval_ms>300000</max_poll_interval_ms>
                         <heartbeat_interval_ms>3000</heartbeat_interval_ms>
-                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <auto_offset_reset>latest</auto_offset_reset>
                     </kafka>
                 </kafka_local>
                 <kafka_regional>
@@ -75,7 +75,7 @@ spec:
                         <session_timeout_ms>60000</session_timeout_ms>
                         <max_poll_interval_ms>300000</max_poll_interval_ms>
                         <heartbeat_interval_ms>3000</heartbeat_interval_ms>
-                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <auto_offset_reset>latest</auto_offset_reset>
                     </kafka>
                 </kafka_regional>
                 <kafka_global>
@@ -96,7 +96,7 @@ spec:
                         <session_timeout_ms>60000</session_timeout_ms>
                         <max_poll_interval_ms>300000</max_poll_interval_ms>
                         <heartbeat_interval_ms>3000</heartbeat_interval_ms>
-                        <auto_offset_reset>earliest</auto_offset_reset>
+                        <auto_offset_reset>latest</auto_offset_reset>
                     </kafka>
                 </kafka_global>
             </named_collections>

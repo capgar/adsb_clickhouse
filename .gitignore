@@ -18,8 +18,8 @@ manifests/scrapers/10-configmap.yaml
 
 # Keep example files
 !manifests/clickhouse/10-secrets-kafka-tls.yaml.example
-manifests/clickhouse/30-clickhouse.yaml.example
-manifests/clickhouse/30-clickhouse-eks.yaml.example
+!manifests/clickhouse/30-clickhouse.yaml.example
+!manifests/clickhouse/30-clickhouse-eks.yaml.example
 !manifests/kafka/10-secrets.yaml.example
 !manifests/monitoring/10-grafana-config.yaml.example
 !manifests/scrapers/10-configmap.yaml.example

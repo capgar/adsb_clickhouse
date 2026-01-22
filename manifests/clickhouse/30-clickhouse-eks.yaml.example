@@ -122,10 +122,11 @@ spec:
             runAsGroup: 101
             fsGroup: 101
           
-          # EKS: Remove nodeSelector to let scheduler place pods
-          # With 2 shards x 2 replicas, pods will spread across nodes/AZs
+          # Target ClickHouse nodes (can be spot instances)
+          nodeSelector:
+            workload-type: clickhouse
           
-          # Optional: Use pod anti-affinity to spread replicas across nodes
+          # Spread ClickHouse replicas across nodes/AZs for HA
           affinity:
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:
@@ -138,6 +139,15 @@ spec:
                           values:
                             - adsb-data
                     topologyKey: kubernetes.io/hostname
+          
+          # Spread across availability zones
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  clickhouse.altinity.com/chi: adsb-data
           
           containers:
             - name: clickhouse

@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 0,
+  "id": 5,
   "links": [],
   "panels": [
     {
@@ -43,7 +43,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#7d7d7db3",
+                "color": "#80808080",
                 "value": 0
               },
               {
@@ -296,7 +296,7 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed,\r\n    registration,\r\n    aircraft_type,\r\n    description\r\nFROM adsb.positions_local_latest",
+          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed,\r\n    registration,\r\n    aircraft_type,\r\n    description\r\nFROM adsb.positions_local_latest\r\nORDER BY alt_baro ASC",
           "refId": "pos_current"
         },
         {
@@ -319,7 +319,7 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    scrape_time as time,\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    alt_baro\r\nFROM adsb.positions_local_dist\r\nWHERE $__timeFilter(time)\r\nORDER BY time ASC",
+          "rawSql": "SELECT\r\n    scrape_time as time,\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    alt_baro\r\nFROM adsb.positions_local\r\nWHERE $__timeFilter(time)\r\nORDER BY time ASC",
           "refId": "pos_past"
         },
         {
@@ -546,5 +546,5 @@
   "timezone": "browser",
   "title": "Current Positions: Local",
   "uid": "sdf34r",
-  "version": 14
+  "version": 17
 }

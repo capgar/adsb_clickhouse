@@ -1,0 +1,71 @@
+# playbooks/03-install-operators.yml
+# Install ClickHouse and Keeper operators
+
+---
+- name: Get latest ClickHouse operator version
+  block:
+    - name: Fetch latest release from GitHub
+      uri:
+        url: https://api.github.com/repos/Altinity/clickhouse-operator/releases/latest
+        return_content: yes
+      register: operator_release
+
+    - name: Parse version
+      set_fact:
+        operator_version: "{{ operator_release.json.tag_name | regex_replace('^release-', '') }}"
+
+    - name: Display operator version
+      debug:
+        msg: "Installing ClickHouse Operator version: {{ operator_version }}"
+
+- name: Install ClickHouse Operator
+  block:
+    - name: Apply ClickHouse operator manifest
+      command: >
+        kubectl apply -f
+        https://raw.githubusercontent.com/Altinity/clickhouse-operator/{{ operator_version }}/deploy/operator/clickhouse-operator-install-bundle.yaml
+      environment: "{{ kubectl_env }}"
+      register: operator_install
+      changed_when: "'created' in operator_install.stdout or 'configured' in operator_install.stdout"
+
+    - name: Wait for operator to be ready
+      command: >
+        kubectl wait --for=condition=ready pod
+        -l app=clickhouse-operator
+        -n kube-system
+        --timeout={{ operator_ready_timeout }}s
+      environment: "{{ kubectl_env }}"
+      register: operator_ready
+      changed_when: false
+
+    - name: Display operator status
+      debug:
+        msg: "ClickHouse Operator installed and ready"
+
+- name: Verify operator installation
+  block:
+    - name: Check operator pods
+      command: kubectl get pods -n kube-system -l app=clickhouse-operator
+      environment: "{{ kubectl_env }}"
+      register: operator_pods
+      changed_when: false
+
+    - name: Check CRDs installed
+      command: kubectl get crd
+      environment: "{{ kubectl_env }}"
+      register: crds
+      changed_when: false
+
+    - name: Verify ClickHouse CRDs
+      assert:
+        that:
+          - "'clickhouseinstallations.clickhouse.altinity.com' in crds.stdout"
+          - "'clickhousekeeperinstallations.clickhouse-keeper.altinity.com' in crds.stdout"
+        fail_msg: "ClickHouse CRDs not found"
+        success_msg: "ClickHouse CRDs installed"
+
+    - name: Display operator details
+      debug:
+        msg:
+          - "Operator pods:"
+          - "{{ operator_pods.stdout_lines }}"

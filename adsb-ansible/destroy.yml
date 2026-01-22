@@ -1,0 +1,88 @@
+# destroy.yml
+# Playbook to tear down the entire EKS deployment
+# Usage: ansible-playbook -i inventory/eks.yml destroy.yml
+
+---
+- name: Destroy ADSB EKS Deployment
+  hosts: localhost
+  gather_facts: yes
+  
+  vars_files:
+    - group_vars/eks.yml
+  
+  vars_prompt:
+    - name: confirm_destroy
+      prompt: "Are you sure you want to destroy the EKS cluster and all data? (yes/no)"
+      private: no
+
+  tasks:
+    - name: Verify destruction confirmation
+      assert:
+        that: confirm_destroy == 'yes'
+        fail_msg: "Destruction cancelled"
+
+    - name: Configure kubectl
+      include_tasks: playbooks/02-configure-kubectl.yml
+      tags: [kubectl]
+      ignore_errors: yes  # May fail if cluster already destroyed
+
+    - name: Delete Kubernetes resources
+      block:
+        - name: Delete monitoring namespace
+          command: kubectl delete namespace {{ monitoring_namespace }} --ignore-not-found=true
+          environment: "{{ kubectl_env }}"
+          register: monitoring_delete
+          changed_when: "'deleted' in monitoring_delete.stdout"
+
+        - name: Delete clickhouse namespace
+          command: kubectl delete namespace {{ clickhouse_namespace }} --ignore-not-found=true
+          environment: "{{ kubectl_env }}"
+          register: clickhouse_delete
+          changed_when: "'deleted' in clickhouse_delete.stdout"
+
+        - name: Wait for namespaces to be fully deleted
+          command: kubectl get namespace {{ item }} --ignore-not-found=true
+          environment: "{{ kubectl_env }}"
+          register: ns_check
+          until: ns_check.stdout == ""
+          retries: 30
+          delay: 10
+          loop:
+            - "{{ clickhouse_namespace }}"
+            - "{{ monitoring_namespace }}"
+          failed_when: false
+
+      when: kubectl_env is defined
+      ignore_errors: yes
+
+    - name: Destroy Terraform infrastructure
+      block:
+        - name: Run terraform destroy
+          command:
+            cmd: terraform destroy -auto-approve
+            chdir: "{{ terraform_dir }}"
+          register: terraform_destroy
+          async: 1800  # 30 minutes
+          poll: 15
+
+        - name: Display destruction results
+          debug:
+            msg: "{{ terraform_destroy.stdout_lines | select('search', 'Destroy complete') | list }}"
+
+    - name: Clean up kubectl config
+      block:
+        - name: Remove EKS kubeconfig
+          file:
+            path: "{{ ansible_env.HOME }}/.kube/configs/eks-lab"
+            state: absent
+          register: kubeconfig_removed
+
+    - name: Display cleanup summary
+      debug:
+        msg:
+          - "EKS cluster destroyed"
+          - "Kubernetes resources deleted"
+          - "kubectl config cleaned"
+          - ""
+          - "{{ 'Note: S3 backup bucket ' + clickhouse_backup_bucket + ' may still contain data' if clickhouse_backup_bucket is defined else 'Note: Check for any remaining S3 buckets' }}"
+          - "{{ 'Manually delete if needed: aws s3 rb s3://' + clickhouse_backup_bucket + ' --force' if clickhouse_backup_bucket is defined else 'List buckets: aws s3 ls | grep clickhouse' }}"

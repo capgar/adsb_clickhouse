@@ -40,5 +40,6 @@ variable "node_groups" {
     max_size       = number
     desired_size   = number
     disk_size      = number
+    labels         = optional(map(string), {})
   }))
 }

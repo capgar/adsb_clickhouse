@@ -143,10 +143,13 @@ resource "aws_eks_node_group" "main" {
   # Use latest EKS-optimized AMI for ARM64
   ami_type = "AL2_ARM_64"
 
-  labels = {
-    role = "worker"
-    arch = "arm64"
-  }
+  labels = merge(
+    {
+      role = "worker"
+      arch = "arm64"
+    },
+      each.value.labels
+  )
 
   tags = {
     Name = "${var.cluster_name}-${each.key}"

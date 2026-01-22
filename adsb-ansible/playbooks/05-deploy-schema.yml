@@ -1,0 +1,131 @@
+# playbooks/05-deploy-schema.yml
+# Deploy ClickHouse schema and users
+
+---
+- name: Verify ClickHouse cluster is ready
+  block:
+    - name: Get first ClickHouse pod
+      command: >
+        kubectl get pods -n {{ clickhouse_namespace }}
+        -l clickhouse.altinity.com/chi=adsb-data
+        -o jsonpath='{.items[0].metadata.name}'
+      environment: "{{ kubectl_env }}"
+      register: first_pod
+      changed_when: false
+
+    - name: Set ClickHouse pod name
+      set_fact:
+        clickhouse_pod: "{{ first_pod.stdout }}"
+
+    - name: Test ClickHouse connectivity
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT 1"
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_test
+      changed_when: false
+      retries: 5
+      delay: 10
+      until: clickhouse_test.rc == 0
+
+- name: Verify cluster configuration
+  block:
+    - name: Check cluster topology
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT * FROM system.clusters WHERE cluster = 'adsb-data' FORMAT Vertical"
+      environment: "{{ kubectl_env }}"
+      register: cluster_topology
+      changed_when: false
+
+    - name: Display cluster topology
+      debug:
+        msg: "{{ cluster_topology.stdout_lines }}"
+
+    - name: Verify Keeper connectivity
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM system.zookeeper WHERE path = '/'"
+      environment: "{{ kubectl_env }}"
+      register: keeper_test
+      changed_when: false
+
+    - name: Assert Keeper is working
+      assert:
+        that: keeper_test.stdout | int > 0
+        fail_msg: "Keeper is not accessible"
+        success_msg: "Keeper connectivity verified"
+
+- name: Deploy schema files
+  block:
+    - name: Copy schema files to ClickHouse pod
+      command: >
+        kubectl cp {{ item }}
+        {{ clickhouse_namespace }}/{{ clickhouse_pod }}:/tmp/{{ item | basename }}
+      environment: "{{ kubectl_env }}"
+      loop: "{{ schema_files }}"
+      register: schema_copy
+      changed_when: schema_copy.rc == 0
+
+    - name: Execute schema files in pod
+      shell: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        sh -c "clickhouse-client --multiquery < /tmp/{{ item | basename }}"
+      environment: "{{ kubectl_env }}"
+      loop: "{{ schema_files }}"
+      register: schema_exec
+      changed_when: schema_exec.rc == 0
+
+- name: Verify schema deployment
+  block:
+    - name: List databases
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SHOW DATABASES"
+      environment: "{{ kubectl_env }}"
+      register: databases
+      changed_when: false
+
+    - name: List tables in adsb database
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SHOW TABLES FROM adsb"
+      environment: "{{ kubectl_env }}"
+      register: tables
+      changed_when: false
+
+    - name: Display schema deployment results
+      debug:
+        msg:
+          - "Schema deployed"
+          - "Databases:"
+          - "{{ databases.stdout_lines }}"
+          - ""
+          - "Tables in adsb:"
+          - "{{ tables.stdout_lines }}"
+
+- name: Verify tables on all shards
+  block:
+    - name: Get all ClickHouse pods
+      command: >
+        kubectl get pods -n {{ clickhouse_namespace }}
+        -l clickhouse.altinity.com/chi=adsb-data
+        -o jsonpath='{.items[*].metadata.name}'
+      environment: "{{ kubectl_env }}"
+      register: all_pods
+      changed_when: false
+
+    - name: Check tables on each pod
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ item }} --
+        clickhouse-client --query "SELECT count() FROM system.tables WHERE database = 'adsb'"
+      environment: "{{ kubectl_env }}"
+      loop: "{{ all_pods.stdout.split() }}"
+      register: pod_tables
+      changed_when: false
+
+    - name: Verify table consistency
+      assert:
+        that: pod_tables.results | map(attribute='stdout') | unique | length == 1
+        fail_msg: "Table counts differ across pods"
+        success_msg: "Tables replicated consistently across all pods"

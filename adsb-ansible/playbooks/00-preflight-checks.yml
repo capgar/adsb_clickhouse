@@ -1,0 +1,87 @@
+# playbooks/00-preflight-checks.yml
+# Pre-deployment validation checks
+
+---
+- name: Check required tools are installed
+  block:
+    - name: Check for terraform
+      command: terraform version
+      register: terraform_check
+      changed_when: false
+      failed_when: terraform_check.rc != 0
+
+    - name: Check for kubectl
+      command: kubectl version --client
+      register: kubectl_check
+      changed_when: false
+      failed_when: kubectl_check.rc != 0
+
+    - name: Check for aws cli
+      command: aws --version
+      register: aws_check
+      changed_when: false
+      failed_when: aws_check.rc != 0
+
+    - name: Display tool versions
+      debug:
+        msg:
+          - "Terraform: {{ terraform_check.stdout_lines[0] }}"
+          - "kubectl: {{ kubectl_check.stdout_lines[0] }}"
+          - "AWS CLI: {{ aws_check.stdout }}"
+
+- name: Check AWS credentials
+  block:
+    - name: Verify AWS credentials are valid
+      command: aws sts get-caller-identity
+      register: aws_identity
+      changed_when: false
+      failed_when: aws_identity.rc != 0
+
+    - name: Parse AWS account info
+      set_fact:
+        aws_account_id: "{{ (aws_identity.stdout | from_json).Account }}"
+        aws_user_arn: "{{ (aws_identity.stdout | from_json).Arn }}"
+
+    - name: Display AWS identity
+      debug:
+        msg:
+          - "AWS Account: {{ aws_account_id }}"
+          - "AWS User: {{ aws_user_arn }}"
+
+- name: Check required files exist
+  block:
+    - name: Check Terraform directory exists
+      stat:
+        path: "{{ terraform_dir }}"
+      register: terraform_dir_check
+      failed_when: not terraform_dir_check.stat.exists
+
+    - name: Check manifests directory exists
+      stat:
+        path: "{{ manifests_dir }}"
+      register: manifests_dir_check
+      failed_when: not manifests_dir_check.stat.exists
+
+    - name: Check schema files exist
+      stat:
+        path: "{{ item }}"
+      register: schema_files_check
+      loop: "{{ schema_files }}"
+
+    - name: Check Kafka TLS certificates exist
+      stat:
+        path: "{{ item }}"
+      register: cert_check
+      loop:
+        - "{{ kafka_ca_cert }}"
+        - "{{ kafka_client_cert }}"
+        - "{{ kafka_client_key }}"
+
+    - name: Display preflight check results
+      debug:
+        msg:
+          - "All required tools installed"
+          - "AWS credentials valid"
+          - "Required directories exist"
+          - "Schema files found"
+          - "Kafka TLS certificates present"

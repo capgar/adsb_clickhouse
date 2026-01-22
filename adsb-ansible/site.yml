@@ -1,0 +1,61 @@
+# site.yml
+# Main playbook for deploying ADSB ClickHouse to EKS
+# Usage: ansible-playbook -i inventory/eks.yml site.yml
+
+---
+- name: Deploy ADSB ClickHouse Stack to EKS
+  hosts: localhost
+  gather_facts: yes
+  
+  vars_files:
+    - group_vars/eks.yml
+  
+  tasks:
+    - name: Include pre-deployment checks
+      import_tasks: playbooks/00-preflight-checks.yml
+      tags: [always, preflight]
+    
+    - name: Deploy infrastructure with Terraform
+      import_tasks: playbooks/01-deploy-infrastructure.yml
+      tags: [infra, terraform]
+    
+    - name: Configure kubectl access
+      import_tasks: playbooks/02-configure-kubectl.yml
+      tags: [infra, kubectl]
+    
+    - name: Install ClickHouse operators
+      import_tasks: playbooks/03-install-operators.yml
+      tags: [operators]
+    
+    - name: Deploy ClickHouse cluster
+      import_tasks: playbooks/04-deploy-clickhouse.yml
+      tags: [clickhouse]
+    
+    - name: Deploy schema
+      import_tasks: playbooks/05-deploy-schema.yml
+      tags: [schema]
+    
+    - name: Deploy monitoring (Grafana)
+      import_tasks: playbooks/06-deploy-monitoring.yml
+      tags: [monitoring, grafana]
+    
+    - name: Validate deployment
+      import_tasks: playbooks/07-validate-deployment.yml
+      tags: [validate]
+
+- name: Display deployment summary
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Show deployment information
+      debug:
+        msg:
+          - "ADSB EKS Deployment Complete"
+          - "Cluster: {{ eks_cluster_name }}"
+          - "Region: {{ aws_region }}"
+          - ""
+          - "Next steps:"
+          - "1. Get ClickHouse endpoint: kubectl get svc clickhouse-adsb-data -n clickhouse"
+          - "2. Get Grafana endpoint: kubectl get svc grafana -n monitoring"
+          - "3. Check data ingestion: Run validation queries"

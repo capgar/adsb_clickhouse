@@ -182,7 +182,7 @@ class LocalScraper:
         logger.info(f"Fetching from local URL: {url}")
         
         try:
-            response = requests.get(url, timeout=3)
+            response = requests.get(url, timeout=2)
             
             # Check for rate limiting or forbidden responses
             if response.status_code == 429:
@@ -249,7 +249,7 @@ class LocalScraper:
                     'ownOp': ac.get('ownOp', ''),
                     'year': ac.get('year', ''),
                     # Metadata
-                    'source': 'local'
+                    'source': url
                 }
                 aircraft_list.append(aircraft)
             
@@ -277,7 +277,7 @@ class RegionalScraper:
         logger.info(f"Fetching from regional URL: {url}")
         
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=5)
             
             # Check for rate limiting or forbidden responses
             if response.status_code == 429:
@@ -345,7 +345,7 @@ class RegionalScraper:
                     'ownOp': ac.get('ownOp', ''),
                     'year': ac.get('year', ''),
                     # Metadata
-                    'source': 'regional'
+                    'source': url
                 }
                 aircraft_list.append(aircraft)
             
@@ -439,7 +439,7 @@ class GlobalScraper:
                     'dst': ac.get('dst'),
                     'dir': ac.get('dir'),
                     # Metadata
-                    'source': 'global'
+                    'source': url
                 }
                 aircraft_list.append(aircraft)
             

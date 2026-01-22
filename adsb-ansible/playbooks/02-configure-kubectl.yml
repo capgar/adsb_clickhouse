@@ -1,0 +1,63 @@
+# playbooks/02-configure-kubectl.yml
+# Configure kubectl access to EKS cluster
+
+---
+- name: Configure kubectl for EKS cluster
+  block:
+    - name: Update kubeconfig for EKS
+      command: >
+        aws eks update-kubeconfig
+        --region {{ aws_region }}
+        --name {{ eks_cluster_name }}
+        --alias eks-lab
+        --kubeconfig ~/.kube/configs/eks-lab
+      register: kubeconfig_update
+      changed_when: "'Updated context' in kubeconfig_update.stderr or 'Added new context' in kubeconfig_update.stderr"
+
+    - name: Set KUBECONFIG environment variable
+      set_fact:
+        kubeconfig_path: "{{ ansible_env.HOME }}/.kube/configs/eks-lab"
+
+    - name: Test kubectl connectivity
+      command: kubectl get nodes
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: kubectl_nodes
+      changed_when: false
+      retries: 5
+      delay: 10
+      until: kubectl_nodes.rc == 0
+
+    - name: Display cluster nodes
+      debug:
+        var: kubectl_nodes.stdout_lines
+
+- name: Verify EBS CSI driver
+  block:
+    - name: Check EBS CSI driver pods
+      command: kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-ebs-csi-driver
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: ebs_csi_pods
+      changed_when: false
+
+    - name: Verify storage classes
+      command: kubectl get sc
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: storage_classes
+      changed_when: false
+
+    - name: Display storage classes
+      debug:
+        msg:
+          - "EBS CSI Driver status:"
+          - "{{ ebs_csi_pods.stdout_lines }}"
+          - ""
+          - "Available storage classes:"
+          - "{{ storage_classes.stdout_lines }}"
+
+- name: Set kubectl context for all tasks
+  set_fact:
+    kubectl_env:
+      KUBECONFIG: "{{ kubeconfig_path }}"

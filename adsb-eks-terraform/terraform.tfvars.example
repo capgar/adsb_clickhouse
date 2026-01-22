@@ -13,16 +13,32 @@ vpc_cidr           = "10.0.0.0/"
 single_nat_gateway = true  # Set to false for multi-AZ HA (higher cost)
 
 # Node Groups Configuration
+# Specify capacity_type SPOT or ON_DEMAND
 node_groups = {
-  # On-demand node group
-  graviton_ondemand = {
-    instance_types = ["t4g.medium"]  # 2 vCPU, 4GB RAM, ARM64
+  clickhouse_spot = {
+    instance_types = ["t4g.medium"]
     capacity_type  = "ON_DEMAND"
-    min_size       = 3
-    max_size       = 5
-    desired_size   = 4  # Enough for 4 ClickHouse + 3 Keeper + 1 Grafana
-    disk_size      = 30
+    min_size       = 1
+    max_size       = 4
+    desired_size   = 4
+    disk_size      = 40
+    labels = {
+      workload-type = "clickhouse"
+    }
   }
+
+  support_spot = {
+    instance_types = ["t4g.small"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 2
+    max_size       = 3
+    desired_size   = 3
+    disk_size      = 20
+    labels = {
+      workload-type = "support"
+    }
+  }
+}
 
   # Spot instance node group
   # graviton_spot = {

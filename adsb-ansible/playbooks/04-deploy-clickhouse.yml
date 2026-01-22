@@ -1,0 +1,170 @@
+# playbooks/04-deploy-clickhouse.yml
+# Deploy ClickHouse cluster (Keeper + ClickHouse instances)
+
+---
+- name: Create Kubernetes namespaces
+  block:
+    - name: Create clickhouse namespace
+      command: kubectl create namespace {{ clickhouse_namespace }} --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_ns_yaml
+      changed_when: false
+
+    - name: Apply clickhouse namespace
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ clickhouse_ns_yaml.stdout }}"
+      register: clickhouse_ns
+      changed_when: "'created' in clickhouse_ns.stdout or 'configured' in clickhouse_ns.stdout"
+
+    - name: Create monitoring namespace
+      command: kubectl create namespace {{ monitoring_namespace }} --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: monitoring_ns_yaml
+      changed_when: false
+
+    - name: Apply monitoring namespace
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ monitoring_ns_yaml.stdout }}"
+      register: monitoring_ns
+      changed_when: "'created' in monitoring_ns.stdout or 'configured' in monitoring_ns.stdout"
+
+- name: Create ClickHouse S3 ServiceAccount
+  block:
+    - name: Create ServiceAccount manifest
+      template:
+        src: ../templates/clickhouse-s3-serviceaccount.yml.j2
+        dest: /tmp/clickhouse-s3-sa.yml
+      vars:
+        role_arn: "{{ clickhouse_s3_role_arn }}"
+
+    - name: Apply ServiceAccount
+      command: kubectl apply -f /tmp/clickhouse-s3-sa.yml
+      environment: "{{ kubectl_env }}"
+      register: sa_create
+      changed_when: "'created' in sa_create.stdout or 'configured' in sa_create.stdout"
+
+- name: Deploy Kafka TLS certificates
+  block:
+    - name: Create Kafka TLS secret
+      command: >
+        kubectl create secret generic {{ kafka_tls_secret_name }}
+        --from-file=ca.crt={{ kafka_ca_cert }}
+        --from-file=client.crt={{ kafka_client_cert }}
+        --from-file=client.key={{ kafka_client_key }}
+        -n {{ clickhouse_namespace }}
+        --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: kafka_secret_yaml
+      changed_when: false
+
+    - name: Apply Kafka TLS secret
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ kafka_secret_yaml.stdout }}"
+      register: kafka_secret
+      changed_when: "'created' in kafka_secret.stdout or 'configured' in kafka_secret.stdout"
+
+- name: Deploy ClickHouse Keeper
+  block:
+    - name: Apply Keeper manifest
+      command: kubectl apply -f {{ manifests_dir }}/clickhouse/20-keeper-eks.yaml
+      environment: "{{ kubectl_env }}"
+      register: keeper_deploy
+      changed_when: "'created' in keeper_deploy.stdout or 'configured' in keeper_deploy.stdout"
+
+    - name: Wait for Keeper pods to be created
+      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper --no-headers | wc -l
+      environment: "{{ kubectl_env }}"
+      register: keeper_pod_count
+      until: keeper_pod_count.stdout | int >= {{ clickhouse_keeper_replicas }}
+      retries: 60
+      delay: 3
+      changed_when: false
+
+    - name: Wait for Keeper pods to be ready
+      command: >
+        kubectl wait --for=condition=ready pod
+        -l clickhouse-keeper.altinity.com/chk=adsb-keeper
+        -n {{ clickhouse_namespace }}
+        --timeout={{ pod_ready_timeout }}s
+      environment: "{{ kubectl_env }}"
+      register: keeper_ready
+      changed_when: false
+
+    - name: Verify Keeper cluster
+      command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper
+      environment: "{{ kubectl_env }}"
+      register: keeper_pods
+      changed_when: false
+
+    - name: Display Keeper status
+      debug:
+        msg:
+          - "Keeper cluster deployed"
+          - "{{ keeper_pods.stdout_lines }}"
+
+- name: Deploy ClickHouse cluster
+  block:
+    - name: Apply ClickHouse manifest
+      command: kubectl apply -f {{ manifests_dir }}/clickhouse/30-clickhouse-eks.yaml
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_deploy
+      changed_when: "'created' in clickhouse_deploy.stdout or 'configured' in clickhouse_deploy.stdout"
+
+    - name: Wait for ClickHouse pods to be created
+      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data --no-headers | wc -l
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_pod_count
+      until: clickhouse_pod_count.stdout | int >= {{ clickhouse_shards * clickhouse_replicas }}
+      retries: 60
+      delay: 3
+      changed_when: false
+
+    - name: Wait for ClickHouse pods to be ready
+      command: >
+        kubectl wait --for=condition=ready pod
+        -l clickhouse.altinity.com/chi=adsb-data
+        -n {{ clickhouse_namespace }}
+        --timeout={{ pod_ready_timeout }}s
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_ready
+      changed_when: false
+
+    - name: Get ClickHouse pods
+      command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o wide
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_pods
+      changed_when: false
+
+    - name: Display ClickHouse status
+      debug:
+        msg:
+          - "ClickHouse cluster deployed ({{ clickhouse_shards }} shards × {{ clickhouse_replicas }} replicas)"
+          - "{{ clickhouse_pods.stdout_lines }}"
+
+- name: Get ClickHouse service endpoint
+  block:
+    - name: Get ClickHouse service
+      command: kubectl get svc clickhouse-adsb-data -n {{ clickhouse_namespace }} -o json
+      environment: "{{ kubectl_env }}"
+      register: clickhouse_svc
+      changed_when: false
+
+    - name: Parse service endpoint
+      set_fact:
+        clickhouse_service: "{{ clickhouse_svc.stdout | from_json }}"
+        
+    - name: Set ClickHouse endpoint
+      set_fact:
+        clickhouse_endpoint: "{{ clickhouse_service.status.loadBalancer.ingress[0].hostname | default('pending') }}"
+      when: clickhouse_service_type == 'LoadBalancer'
+
+    - name: Display ClickHouse endpoint
+      debug:
+        msg:
+          - "ClickHouse endpoint: {{ clickhouse_endpoint | default('Use port-forward or NodePort') }}"

@@ -53,9 +53,31 @@ spec:
     podTemplates:
       - name: keeper-pod
         spec:
-          # EKS: Remove nodeSelector to let scheduler place pods
-          # Pods will spread across AZs automatically with 3 replicas
+          # Target support nodes (on-demand)
+          nodeSelector:
+            workload-type: support
           
+          # Spread Keeper pods across different nodes for HA
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: clickhouse-keeper.altinity.com/chk
+                        operator: In
+                        values:
+                          - adsb-keeper
+                  topologyKey: kubernetes.io/hostname
+
+          # Spread across availability zones
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  clickhouse-keeper.altinity.com/chk: adsb-keeper
+
           containers:
             - name: clickhouse-keeper
               image: altinity/clickhouse-keeper:25.3.8.10041.altinitystable

@@ -1,0 +1,141 @@
+# playbooks/07-validate-deployment.yml
+# Validate ClickHouse deployment and data ingestion
+
+---
+- name: Validate ClickHouse cluster health
+  block:
+    - name: Get first ClickHouse pod
+      command: >
+        kubectl get pods -n {{ clickhouse_namespace }}
+        -l clickhouse.altinity.com/chi=adsb-data
+        -o jsonpath='{.items[0].metadata.name}'
+      environment: "{{ kubectl_env }}"
+      register: first_pod
+      changed_when: false
+
+    - name: Set pod name for queries
+      set_fact:
+        clickhouse_pod: "{{ first_pod.stdout }}"
+
+    - name: Check cluster status
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM system.clusters WHERE cluster = 'adsb-data'"
+      environment: "{{ kubectl_env }}"
+      register: cluster_count
+      changed_when: false
+
+    - name: Verify expected cluster size
+      assert:
+        that: cluster_count.stdout | int == (clickhouse_shards | int * clickhouse_replicas | int)
+        fail_msg: "Expected {{ clickhouse_shards * clickhouse_replicas }} cluster members, found {{ cluster_count.stdout }}"
+        success_msg: "Cluster has correct number of members"
+
+- name: Validate replication
+  when: validate_replication | bool
+  block:
+    - name: Check replication status
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM system.replicas WHERE is_readonly = 0"
+      environment: "{{ kubectl_env }}"
+      register: replica_status
+      changed_when: false
+
+    - name: Verify replicas are writable
+      assert:
+        that: replica_status.stdout | int > 0
+        fail_msg: "No writable replicas found"
+        success_msg: "Replicas are healthy and writable"
+
+    - name: Check replication queue
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM system.replication_queue"
+      environment: "{{ kubectl_env }}"
+      register: replication_queue
+      changed_when: false
+
+    - name: Display replication queue size
+      debug:
+        msg: "Replication queue size: {{ replication_queue.stdout }} items"
+
+- name: Validate Kafka connectivity
+  when: validate_kafka_connectivity | bool
+  block:
+    - name: Check Kafka consumers
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM system.kafka_consumers"
+      environment: "{{ kubectl_env }}"
+      register: kafka_consumers
+      changed_when: false
+      failed_when: false  # Don't fail if no consumers yet
+
+    - name: Display Kafka consumer status
+      debug:
+        msg: "Active Kafka consumers: {{ kafka_consumers.stdout | default('0') }}"
+
+- name: Validate data ingestion
+  when: validate_data_ingestion | bool
+  block:
+    - name: Check table row counts
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "
+        SELECT 
+          table,
+          sum(rows) as total_rows 
+        FROM clusterAllReplicas('adsb-data', system.parts) 
+        WHERE database = 'adsb' AND active 
+        GROUP BY table
+        ORDER BY table
+        FORMAT Vertical"
+      environment: "{{ kubectl_env }}"
+      register: table_counts
+      changed_when: false
+      failed_when: false
+
+    - name: Display data ingestion status
+      debug:
+        msg:
+          - "Data ingestion status:"
+          - "{{ table_counts.stdout_lines }}"
+
+- name: Test cross-shard queries
+  block:
+    - name: Query distributed table
+      command: >
+        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
+        clickhouse-client --query "SELECT count() FROM adsb.positions_local_dist"
+      environment: "{{ kubectl_env }}"
+      register: distributed_count
+      changed_when: false
+      failed_when: false
+
+    - name: Display distributed query result
+      debug:
+        msg: "Total rows across all shards: {{ distributed_count.stdout | default('0') }}"
+
+- name: Generate validation summary
+  block:
+    - name: Create summary
+      set_fact:
+        validation_summary:
+          - "=== Deployment Validation Summary ==="
+          - ""
+          - "Cluster Health:"
+          - "  {{ clickhouse_shards * clickhouse_replicas }} cluster members active"
+          - "  Replication: {{ replica_status.stdout | default('unknown') }} writable replicas"
+          - ""
+          - "Data Ingestion:"
+          - "  Kafka consumers: {{ kafka_consumers.stdout | default('0') }}"
+          - "  Total rows (distributed): {{ distributed_count.stdout | default('0') }}"
+          - ""
+          - "Services:"
+          - "  ClickHouse: {{ clickhouse_endpoint | default('kubectl port-forward') }}"
+          - "  Grafana: {{ grafana_endpoint | default('kubectl port-forward') }}"
+
+    - name: Display validation summary
+      debug:
+        msg: "{{ validation_summary }}"

@@ -1,0 +1,24 @@
+# inventory/eks.yml
+# Inventory for EKS deployment (runs locally against AWS/K8s APIs)
+
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  
+  vars:
+    # Deployment target
+    deployment_env: eks
+    
+    # AWS Configuration
+    aws_region: us-east-1
+    eks_cluster_name: adsb-eks-lab
+    
+    # Project paths (adjust to your repo structure)
+    project_root: "{{ playbook_dir }}/.."
+    terraform_dir: "{{ project_root }}/adsb-eks-terraform"
+    manifests_dir: "{{ project_root }}/manifests"
+    schema_dir: "{{ project_root }}/schema"
+    certs_dir: "{{ project_root }}/certs"
+    dashboards_dir: "{{ project_root }}/dashboards"

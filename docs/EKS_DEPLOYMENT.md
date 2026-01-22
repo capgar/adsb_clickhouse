@@ -1,4 +1,6 @@
 # ADSB EKS Deployment Checklist
+This document is deprecated - review docs/ANSIBLE_DEPLOYMENT.md
+
 
 ## Pre-Deployment
 
@@ -19,6 +21,7 @@ Required tools installed:
   - kubectl
   - helm
   - aws-cli
+
 
 ## Infrastructure Deployment (Terraform)
 
@@ -49,18 +52,12 @@ Required tools installed:
   --alias eks-lab \
   --kubeconfig ~/.kube/configs/eks-lab
   
-- Add .kube config to bashrc if necessary
+- Add .kube config path to bashrc if necessary
+export KUBECONFIG=~/.kube/configs/k3s-local:~/.kube/configs/eks-lab
 
 - Verify EBS CSI driver
   kubectl get pods -n kube-system | grep ebs-csi
   kubectl get sc
-
-- Create EKS-specific kubeconfig
-aws eks update-kubeconfig \
-  --region us-east-1 \
-  --name adsb-eks-lab \
-  --alias eks-lab \
-  --kubeconfig ~/.kube/configs/eks-lab
 
 - Install Altinity Clickhouse Operator
   ```bash
@@ -73,11 +70,11 @@ kubectl apply -f https://raw.githubusercontent.com/Altinity/clickhouse-operator/
 ## Clickhouse Deployment
 
 - Create namespaces
-kubectl apply -f manifests/clickhouse/00-namespace.yaml
+kubectl apply -f ../manifests/clickhouse/00-namespace.yaml
 
 - Create ClickHouse S3 service account (for future backups)
-```bash
 ROLE_ARN=$(terraform output -raw clickhouse_s3_role_arn)
+
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
@@ -87,16 +84,16 @@ metadata:
   annotations:
     eks.amazonaws.com/role-arn: ${ROLE_ARN}
 EOF
-```
+
+- Exit terraform dir
+cd ..
 
 - Deploy Kafka TLS secret
-```bash
 kubectl create secret generic kafka-client-tls \
   --from-file=ca.crt=certs/ca.crt \
   --from-file=client.crt=certs/client.crt \
   --from-file=client.key=certs/client.key \
   -n clickhouse
-```
 
 - Deploy ClickHouse Keeper (3 nodes)
   ```bash
@@ -145,7 +142,7 @@ kubectl create secret generic kafka-client-tls \
   ```
 
 
-  ## Phase 4: Schema Deployment
+  ## Schema Deployment
 
 - Prepare schema SQL with cluster-aware commands
   - Add `ON CLUSTER '{cluster}'` to CREATE statements
@@ -186,7 +183,7 @@ kubectl create secret generic kafka-client-tls \
   ```
 
 
-## Phase 5: Monitoring Deployment
+## Monitoring Deployment
 
 - Deploy Grafana
   ```bash
@@ -203,6 +200,9 @@ kubectl create secret generic kafka-client-tls \
   # Default credentials: admin/admin
   ```
 
+- Deploy Dashboards
+kubectl cp ~/dashboards/*.json monitoring/grafana-<pod-id>:/var/lib/grafana/dashboards/
+
 - Verify Grafana datasources
   - Login to Grafana
   - Navigate to Configuration → Data Sources
@@ -210,7 +210,7 @@ kubectl create secret generic kafka-client-tls \
   - Create test dashboard
 
 
-  ## Phase 6: Validation
+  ## Validation
 
 - Verify data ingestion from Kafka
   ```bash
@@ -253,4 +253,3 @@ kubectl create secret generic kafka-client-tls \
   
   # Wait for deleted pod to recreate and rejoin
   kubectl wait --for=condition=ready pod chi-adsb-data-adsb-data-0-0-0 -n clickhouse --timeout=300s
-

@@ -924,7 +924,7 @@ SELECT
     scrape_time,
     ingestion_time
 FROM positions_local_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 10 SECOND;
+WHERE scrape_time > now() - INTERVAL 15 SECOND;
 
 -- Regional latest batch (all aircraft from most recent scrape, all shards)
 CREATE VIEW IF NOT EXISTS positions_regional_latest ON CLUSTER `adsb-data` AS
@@ -971,7 +971,7 @@ SELECT
     scrape_time,
     ingestion_time
 FROM positions_regional_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 30 SECOND;
+WHERE scrape_time > now() - INTERVAL 1 MINUTE;
 
 -- Global latest batch (all aircraft from most recent scrape, all shards)
 CREATE VIEW IF NOT EXISTS positions_global_latest ON CLUSTER `adsb-data` AS
@@ -1016,7 +1016,7 @@ SELECT
     scrape_time,
     ingestion_time
 FROM positions_global_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 2 MINUTE;
+WHERE scrape_time > now() - INTERVAL 5 MINUTE;
 
 
 -- ============================================================================

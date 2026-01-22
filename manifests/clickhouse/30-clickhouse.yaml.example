@@ -21,7 +21,7 @@ spec:
     users:
       default/networks/ip:
         - "127.0.0.1"
-      admin/password_sha256_hex: 2cca9d8714615f4132390a3db9296d39ec051b3faff87be7ea5f7fe0e2de14c9
+      admin/password_sha256_hex: <sha256_hex_value>
       admin/networks/ip:
         - "::/0"
       admin/access_management: "1"

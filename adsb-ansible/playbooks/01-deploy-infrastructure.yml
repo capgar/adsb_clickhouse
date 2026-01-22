@@ -1,0 +1,73 @@
+# playbooks/01-deploy-infrastructure.yml
+# Deploy AWS infrastructure with Terraform
+
+---
+- name: Initialize Terraform
+  block:
+    - name: Run terraform init
+      command:
+        cmd: terraform init
+        chdir: "{{ terraform_dir }}"
+      register: terraform_init
+      changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
+
+    - name: Display terraform init output
+      debug:
+        var: terraform_init.stdout_lines
+      when: terraform_init.changed
+
+- name: Plan Terraform changes
+  block:
+    - name: Run terraform plan
+      command:
+        cmd: terraform plan -out=tfplan
+        chdir: "{{ terraform_dir }}"
+      register: terraform_plan
+      changed_when: false
+
+    - name: Display plan summary
+      debug:
+        msg: "{{ terraform_plan.stdout_lines | select('search', 'Plan:') | list }}"
+
+- name: Apply Terraform configuration
+  block:
+    - name: Run terraform apply
+      command:
+        cmd: terraform apply -auto-approve tfplan
+        chdir: "{{ terraform_dir }}"
+      register: terraform_apply
+      async: "{{ terraform_timeout }}"
+      poll: 10
+
+    - name: Display apply results
+      debug:
+        msg: "{{ terraform_apply.stdout_lines | select('search', 'Apply complete') | list }}"
+
+- name: Capture Terraform outputs
+  block:
+    - name: Get terraform outputs
+      command:
+        cmd: terraform output -json
+        chdir: "{{ terraform_dir }}"
+      register: terraform_outputs
+      changed_when: false
+
+    - name: Parse terraform outputs
+      set_fact:
+        tf_outputs: "{{ terraform_outputs.stdout | from_json }}"
+
+    - name: Set useful facts from outputs
+      set_fact:
+        eks_cluster_endpoint: "{{ tf_outputs.cluster_endpoint.value }}"
+        eks_cluster_region: "{{ tf_outputs.cluster_region.value }}"
+        clickhouse_s3_role_arn: "{{ tf_outputs.clickhouse_s3_role_arn.value }}"
+        clickhouse_backup_bucket: "{{ tf_outputs.clickhouse_backup_bucket.value }}"
+
+    - name: Display infrastructure details
+      debug:
+        msg:
+          - "EKS Cluster: {{ eks_cluster_name }}"
+          - "Region: {{ eks_cluster_region }}"
+          - "Endpoint: {{ eks_cluster_endpoint }}"
+          - "S3 Backup Bucket: {{ clickhouse_backup_bucket }}"
+          - "S3 Role ARN: {{ clickhouse_s3_role_arn }}"

@@ -24,7 +24,7 @@ data:
           defaultDatabase: adsb
           username: adsb_query
         secureJsonData:
-          password: query123
+          password: <PASSWORD>
       
       - name: ClickHouse-Altinity
         type: vertamedia-clickhouse-datasource
@@ -32,5 +32,5 @@ data:
         editable: true
         url: http://clickhouse-adsb-data.clickhouse.svc.cluster.local:8123
         secureJsonData:
-          password: query123
+          password: <PASSWORD>
         user: adsb_query

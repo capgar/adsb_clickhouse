@@ -8,7 +8,7 @@ Nearly every commercial airliner and most civilian aircraft continuously stream 
 network of listening stations.  These stations, in turn, relay this data to a variety of commercial and 
 privately-run networks which aggregate and share the collected position data.
 
-This project leverages ClickHouse, an efficient and scalable columnmar database, to consume ADS-B data from a
+This project leverages ClickHouse, an efficient and scalable columnar database, to consume ADS-B data from a
 variety of sources.  In addition to collecting real-time signals from local commercial aircraft in my local area,
 it also polls worldwide position data from multiple online sources at varying polling rates.  The current
 volume is only a couple million position reports per hour, which easily runs in containers on home PCs.
@@ -25,22 +25,19 @@ This repository contains Kubernetes manifests for deploying:
 - **Grafana + Prometheus**: Grafana provides live visibility into the various ADS-B data streams, including real-time world
   map views. Additional dashboards enabled through the Altinity Operator, provide system health and performance metrics.
 
-Additionally, Terraform automation for standing up infrastructure in EKS, and Ansible automation is being added.
-
 ## Prerequisites
 
-### Kubernetes
-I chose k3s in my homelab, but this should work with any k8s-like distribution
+In order to retrieve public ADS-B position data in bulk, must public feeds require that you also be an ADS-B feeder.
+The steps required to set up an ADS-B receiver are beyond the scope of this document, but I recommend the following project:
+https://github.com/sdr-enthusiasts/docker-adsb-ultrafeeder
 
-### Container Image
-Build and import the scraper image:
-```bash
-cd ~/adsb-scraper
-docker build -t adsb-scraper:latest .
-docker save adsb-scraper:latest | sudo k3s ctr images import -
-```
-For AWS deployment, you'll want to push this to a registry (ECR or Docker Hub)
+Once you have a local feeder running, you are able not only to ingest your own ADS-B receiver's data, but you can also
+poll some of the public feeds to which you are a contributor.  Examples include airplanes.live, adsb.lol, adsb.one, and others.
+Generally, you will need to run your scrapers from the same location (public IP) where your ADS-B reciever feed originates from.
+
 
 ## Setup
-Manual kubernetes manifest deployments, with automated EKS deployment of the Clickhouse and monitoring components in progress.
-Procedures coming shortly.
+For EKS deployments of Clickhouse and monitoring components, refer to docs/ANSIBLE_EKS_DEPLOYMENT.md
+This requires that you have access to a kafka/redpanda cluster, and TLS keypairs for client authentication (see certs/README.md)
+
+For local k8s/k3s/etc lab deployments, including Kafka and the adsb scraper/producers, review docs/LOCAL_DEPLOYMENT.md

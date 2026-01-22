@@ -1,0 +1,97 @@
+# playbooks/06-deploy-monitoring.yml
+# Deploy Grafana and configure datasources
+
+---
+- name: Deploy Grafana configuration
+  block:
+    - name: Apply Grafana datasource ConfigMap
+      command: kubectl apply -f {{ manifests_dir }}/monitoring/10-grafana-config-eks.yaml
+      environment: "{{ kubectl_env }}"
+      register: grafana_config
+      changed_when: "'created' in grafana_config.stdout or 'configured' in grafana_config.stdout"
+
+    - name: Apply Grafana deployment
+      command: kubectl apply -f {{ manifests_dir }}/monitoring/20-grafana-eks.yaml
+      environment: "{{ kubectl_env }}"
+      register: grafana_deploy
+      changed_when: "'created' in grafana_deploy.stdout or 'configured' in grafana_deploy.stdout"
+
+- name: Wait for Grafana to be ready
+  block:
+    - name: Wait for Grafana pod
+      command: >
+        kubectl wait --for=condition=ready pod
+        -l app=grafana
+        -n {{ monitoring_namespace }}
+        --timeout={{ pod_ready_timeout }}s
+      environment: "{{ kubectl_env }}"
+      register: grafana_ready
+      changed_when: false
+
+    - name: Get Grafana pod
+      command: >
+        kubectl get pods -n {{ monitoring_namespace }}
+        -l app=grafana
+        -o jsonpath='{.items[0].metadata.name}'
+      environment: "{{ kubectl_env }}"
+      register: grafana_pod
+      changed_when: false
+
+- name: Get Grafana service endpoint
+  block:
+    - name: Get Grafana service
+      command: kubectl get svc grafana -n {{ monitoring_namespace }} -o json
+      environment: "{{ kubectl_env }}"
+      register: grafana_svc
+      changed_when: false
+
+    - name: Parse Grafana service
+      set_fact:
+        grafana_service: "{{ grafana_svc.stdout | from_json }}"
+
+    - name: Set Grafana endpoint
+      set_fact:
+        grafana_endpoint: "{{ grafana_service.status.loadBalancer.ingress[0].hostname | default('pending') }}"
+      when: grafana_service_type == 'LoadBalancer'
+
+    - name: Display Grafana access info
+      debug:
+        msg:
+          - "Grafana deployed"
+          - "Endpoint: {{ grafana_endpoint | default('Use port-forward or NodePort') }}"
+          - "Default credentials: {{ grafana_admin_user }} / {{ grafana_admin_password }}"
+          - ""
+          - "Access via port-forward:"
+          - "kubectl port-forward -n {{ monitoring_namespace }} svc/grafana 3000:80"
+
+- name: Deploy Grafana dashboards
+  block:
+    - name: Check if dashboards directory exists
+      stat:
+        path: "{{ dashboards_dir }}"
+      register: dashboards_dir_check
+
+    - name: Ensure dashboard directory exists in Grafana pod
+      command: >
+        kubectl exec {{ grafana_pod.stdout }} -n {{ monitoring_namespace }} --
+        mkdir -p /var/lib/grafana/dashboards
+      environment: "{{ kubectl_env }}"
+      when: dashboards_dir_check.stat.exists
+      failed_when: false
+
+    - name: Copy dashboards to Grafana pod
+      command: >
+        kubectl cp {{ item }}
+        {{ monitoring_namespace }}/{{ grafana_pod.stdout }}:/var/lib/grafana/dashboards/
+      environment: "{{ kubectl_env }}"
+      with_fileglob:
+        - "{{ dashboards_dir }}/*.json"
+      when: dashboards_dir_check.stat.exists
+      register: dashboard_copy
+      failed_when: false
+
+    - name: Display dashboard deployment status
+      debug:
+        msg: "{{ dashboard_copy.results | length }} dashboards copied to Grafana"
+      when: dashboards_dir_check.stat.exists
+  when: dashboards_dir is defined

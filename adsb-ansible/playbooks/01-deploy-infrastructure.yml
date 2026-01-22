@@ -29,15 +29,13 @@
       debug:
         msg: "{{ terraform_plan.stdout_lines | select('search', 'Plan:') | list }}"
 
-- name: Apply Terraform configuration
-  block:
-    - name: Run terraform apply
-      command:
-        cmd: terraform apply -auto-approve tfplan
-        chdir: "{{ terraform_dir }}"
+    - name: Run terraform apply with live output
+      shell: |
+        cd {{ terraform_dir }}
+        terraform apply -auto-approve tfplan 2>&1 | tee /tmp/terraform-apply.log
       register: terraform_apply
       async: "{{ terraform_timeout }}"
-      poll: 10
+      poll: 15
 
     - name: Display apply results
       debug:

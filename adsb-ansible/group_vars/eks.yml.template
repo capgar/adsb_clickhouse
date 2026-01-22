@@ -3,7 +3,7 @@
 
 ---
 # AWS/EKS Configuration
-aws_region: us-east-1
+aws_region: us-east-2
 eks_cluster_name: adsb-eks-lab
 eks_cluster_version: "1.32"
 

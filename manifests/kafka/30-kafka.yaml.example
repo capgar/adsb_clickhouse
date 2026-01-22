@@ -66,7 +66,7 @@ spec:
           image: apache/kafka:3.9.0
           env:
             - name: KAFKA_HEAP_OPTS
-              value: "-Xmx3G -Xms2G"
+              value: "-Xmx7G -Xms3G"
             - name: KAFKA_OPTS
               value: "-Djavax.net.debug=ssl"
           
@@ -84,9 +84,9 @@ spec:
               # Listeners
               listeners=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
               # CUSTOMIZE: External advertised listener hostname
-              # k3s-homelab: lab.apgar.us:30192
+              # k3s-homelab: lab.url:30192
               # AWS EKS: <load-balancer-dns>:9094
-              advertised.listeners=INTERNAL://kafka-0.kafka-headless.kafka.svc.cluster.local:9092,EXTERNAL://lab.apgar.us:30192
+              advertised.listeners=INTERNAL://kafka-0.kafka-headless.kafka.svc.cluster.local:9092,EXTERNAL://<lab.url>:30192
               listener.security.protocol.map=INTERNAL:PLAINTEXT,EXTERNAL:SSL
               inter.broker.listener.name=INTERNAL
               
@@ -132,11 +132,11 @@ spec:
           
           resources:
             requests:
-              memory: "2Gi"
-              cpu: "1000m"
-            limits:
               memory: "4Gi"
               cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
       
       volumes:
         - name: kafka-certs
@@ -154,4 +154,4 @@ spec:
         storageClassName: local-path
         resources:
           requests:
-            storage: 50Gi
+            storage: 150Gi

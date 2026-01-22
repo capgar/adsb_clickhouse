@@ -40,7 +40,7 @@ node_groups = {
   }
 }
 
-  # Spot instance node group
+  # Spot instance node group example
   # graviton_spot = {
   #   instance_types = ["t4g.medium", "t4g.small"]  # Multiple types for better availability
   #   capacity_type  = "SPOT"
@@ -48,5 +48,7 @@ node_groups = {
   #   max_size       = 6
   #   desired_size   = 3
   #   disk_size      = 30
+  #   labels = {
+  #     workload-type = "clickhouse"
+  #  }
   # }
-}

@@ -12,7 +12,7 @@ all:
     deployment_env: eks
     
     # AWS Configuration
-    aws_region: us-east-1
+    aws_region: us-east-2
     eks_cluster_name: adsb-eks-lab
     
     # Project paths (adjust to your repo structure)

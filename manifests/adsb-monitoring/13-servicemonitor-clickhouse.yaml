@@ -1,0 +1,25 @@
+---
+# ServiceMonitor for ClickHouse server metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-servers
+  namespace: adsb-clickhouse
+  labels:
+    prometheus: adsb-monitoring
+    app: adsb-clickhouse
+spec:
+  selector:
+    matchLabels:
+      clickhouse.altinity.com/app: chop
+      clickhouse.altinity.com/chi: adsb-data
+      clickhouse.altinity.com/Service: chi
+  namespaceSelector:
+    matchNames:
+    - adsb-clickhouse
+  endpoints:
+  # ClickHouse Prometheus metrics endpoint on dedicated port
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http

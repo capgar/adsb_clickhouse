@@ -2,65 +2,29 @@
 
 Ansible playbooks for automating ADSB ClickHouse deployment to AWS EKS.
 
-## Directory Structure
-
-```
-adsb-ansible/
-├── site.yml                    # Main deployment playbook
-├── destroy.yml                 # Teardown playbook
-├── inventory/
-│   └── eks.yml                 # Inventory for EKS deployment
-├── group_vars/
-│   └── eks.yml                 # Variables for EKS environment
-├── playbooks/
-│   ├── 00-preflight-checks.yml       # Validate prerequisites
-│   ├── 01-deploy-infrastructure.yml  # Terraform deployment
-│   ├── 02-configure-kubectl.yml      # kubectl setup
-│   ├── 03-install-operators.yml      # ClickHouse operators
-│   ├── 04-deploy-clickhouse.yml      # ClickHouse cluster
-│   ├── 05-deploy-schema.yml          # Schema deployment
-│   ├── 06-deploy-monitoring.yml      # Grafana deployment
-│   └── 07-validate-deployment.yml    # Validation checks
-└── templates/
-    └── clickhouse-s3-serviceaccount.yml.j2
-```
 
 ## Prerequisites
 
-1. **Ansible** installed (tested with Ansible 2.9+)
+1. Ansible installed (tested with Ansible 2.9+)
 
-2. **Required tools** (validated by playbook):
+2. Required tools (validated by playbook):
    - terraform >= 1.6
    - kubectl
    - aws-cli
    - helm
 
-3. **AWS credentials** configured:
-   ```bash
+3. AWS credentials configured:
    aws configure
    aws sts get-caller-identity
-   ```
 
-4. **Project structure** (update `inventory/eks.yml` if different):
-   ```
-   your-repo/
-   ├── adsb-ansible/          # This directory
-   ├── adsb-eks-terraform/    # Terraform config
-   ├── manifests/
-   │   └── clickhouse/        # K8s manifests
-   ├── schema/                # SQL schema files
-   ├── certs/                 # Kafka TLS certificates
-   └── dashboards/            # Grafana dashboards (optional)
-   ```
-
-5. **TLS Certificates**
+4. TLS Certificates
 If you are hosting your own Kafka/Redpanda cluster, ensure that the required certs
 and keys are created in the certs directory. See certs/README.md for details.
 certs/ca.crt"
 certs/client.crt"
 certs/client.key"
 
-6. **Users Schema File**
+6. Users Schema File
 Copy schema/users.sql.example to users.sql, replacing the user passwords.
 
 
@@ -164,6 +128,8 @@ This will:
 ```bash
 # 1. Deploy everything
 ansible-playbook -i inventory/eks.yml site.yml
+
+Note: for additional details on the progress of the terraform apply, tail /tmp/terraform-apply.log in another terminal
 
 # 2. Access Grafana
 kubectl port-forward -n monitoring svc/grafana 3000:80

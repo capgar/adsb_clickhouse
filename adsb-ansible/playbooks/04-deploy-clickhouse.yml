@@ -121,9 +121,36 @@
       environment: "{{ kubectl_env }}"
       register: clickhouse_pod_count
       until: clickhouse_pod_count.stdout | int >= {{ clickhouse_shards * clickhouse_replicas }}
-      retries: 60
-      delay: 3
+      retries: 30
+      delay: 2
       changed_when: false
+
+    - name: Check for pending pods (informational)
+      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o jsonpath='{.items[?(@.status.phase=="Pending")].metadata.name}'
+      environment: "{{ kubectl_env }}"
+      register: pending_pods
+      changed_when: false
+
+    - name: Show pending pod details if any
+      shell: |
+        for pod in {{ pending_pods.stdout }}; do
+          echo "=== Pod: $pod ==="
+          kubectl describe pod $pod -n {{ clickhouse_namespace }} | grep -A 10 "Events:"
+        done
+      environment: "{{ kubectl_env }}"
+      when: pending_pods.stdout != ""
+      register: pending_pod_details
+      changed_when: false
+      failed_when: false
+
+    - name: Display pending pod info
+      debug:
+        msg: |
+          Note: {{ pending_pods.stdout.split() | length }} pod(s) currently Pending.
+          This is normal during startup (volume attachment, image pull).
+          
+          {{ pending_pod_details.stdout | default('') }}
+      when: pending_pods.stdout != ""
 
     - name: Wait for ClickHouse pods to be ready
       command: >
@@ -135,17 +162,17 @@
       register: clickhouse_ready
       changed_when: false
 
-    - name: Get ClickHouse pods
+    - name: Display final ClickHouse status
       command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o wide
       environment: "{{ kubectl_env }}"
-      register: clickhouse_pods
+      register: clickhouse_final_status
       changed_when: false
 
-    - name: Display ClickHouse status
+    - name: Show ClickHouse cluster
       debug:
         msg:
-          - "ClickHouse cluster deployed ({{ clickhouse_shards }} shards × {{ clickhouse_replicas }} replicas)"
-          - "{{ clickhouse_pods.stdout_lines }}"
+          - "✓ ClickHouse cluster deployed ({{ clickhouse_shards }} shards × {{ clickhouse_replicas }} replicas)"
+          - "{{ clickhouse_final_status.stdout_lines }}"
 
 - name: Get ClickHouse service endpoint
   block:

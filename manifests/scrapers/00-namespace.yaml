@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: scrapers
-  labels:
-    app.kubernetes.io/name: scrapers

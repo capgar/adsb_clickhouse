@@ -18,12 +18,12 @@ node_groups = {
   clickhouse_spot = {
     instance_types = ["t4g.medium"]
     capacity_type  = "ON_DEMAND"
-    min_size       = 1
+    min_size       = 4
     max_size       = 4
     desired_size   = 4
     disk_size      = 40
     labels = {
-      workload-type = "clickhouse"
+      adsb-clickhouse = "true"
     }
   }
 
@@ -35,7 +35,7 @@ node_groups = {
     desired_size   = 3
     disk_size      = 20
     labels = {
-      workload-type = "support"
+      adsb-clickhouse-keeper = "true"
     }
   }
 }
@@ -49,6 +49,6 @@ node_groups = {
   #   desired_size   = 3
   #   disk_size      = 30
   #   labels = {
-  #     workload-type = "clickhouse"
+  #     adsb-clickhouse = "true"
   #  }
   # }

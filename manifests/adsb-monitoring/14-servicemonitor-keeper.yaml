@@ -1,0 +1,24 @@
+---
+# ServiceMonitor for ClickHouse Keeper metrics
+# Targets the manually-created adsb-keeper-headless service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-keeper
+  namespace: adsb-clickhouse
+  labels:
+    prometheus: adsb-monitoring
+    app: clickhouse-keeper
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse-keeper
+  namespaceSelector:
+    matchNames:
+    - adsb-clickhouse
+  endpoints:
+  # Keeper Prometheus metrics endpoint
+  - port: prometheus
+    interval: 30s
+    path: /metrics
+    scheme: http

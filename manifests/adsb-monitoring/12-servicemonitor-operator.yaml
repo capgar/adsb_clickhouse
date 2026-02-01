@@ -1,0 +1,27 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-operator
+  namespace: kube-system
+  labels:
+    prometheus: adsb-monitoring
+    app: clickhouse-operator
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse-operator
+  namespaceSelector:
+    matchNames:
+    - adsb-clickhouse
+  endpoints:
+  # Operator metrics on port 8888
+  - port: ch-metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  # Additional metrics on port 9999
+  - port: op-metrics
+    interval: 30s
+    path: /metrics
+    scheme: http

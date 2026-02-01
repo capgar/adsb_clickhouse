@@ -5,6 +5,21 @@ metadata:
   name: prometheus-operator
   namespace: adsb-monitoring
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-operator-metrics
+  namespace: adsb-monitoring
+  labels:
+    app: prometheus-operator
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: prometheus-operator
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

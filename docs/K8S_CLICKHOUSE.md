@@ -47,9 +47,8 @@ From the adsb-ansible directory, run:
 
 ### Deploy ClickHouse Stack
 ```bash
-# 1. Install Altinity Clickhouse Operator
-#curl -s https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator-web-installer/clickhouse-operator-install.sh | bash
-#kubectl apply -f https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator/clickhouse-operator-install-bundle.yaml
+1. Install Altinity Clickhouse Operator
+curl -s https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator-web-installer/clickhouse-operator-install.sh | bash
 
 # 2. Create namespace
 kubectl apply -f manifests/adsb-clickhouse/00-namespace.yaml
@@ -84,6 +83,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/prometheus-oper
 
 # 4. Deploy Prometheus
 kubectl apply -f manifests/adsb-monitoring/11-prometheus.yaml
+kubectl get pods -n adsb-monitoring -w
 
 # 5. Deploy service monitors
 kubectl apply -f manifests/adsb-monitoring/12-servicemonitor-operator.yaml
@@ -103,4 +103,39 @@ kubectl apply -f manifests/adsb-monitoring/20-grafana-config.yaml
 # 8. Deploy Grafana
 kubectl apply -f manifests/adsb-monitoring/25-grafana.yaml
 kubectl get pods -n adsb-monitoring -w
+```
+
+
+### Cleanup
+Before deleting the adsb-clickhouse namespace:
+
+```bash
+NAMESPACE="${1:-adsb-clickhouse}"
+
+echo "Cleaning up namespace: $NAMESPACE"
+
+# Step 1: Delete ClickHouseInstallations (operator processes finalizers while running)
+echo "Deleting ClickHouseInstallation resources..."
+kubectl delete clickhouseinstallation --all -n $NAMESPACE --timeout=60s
+
+# Step 2: Delete ClickHouseKeeperInstallations if any
+echo "Deleting ClickHouseKeeperInstallation resources..."
+kubectl delete clickhousekeeperinstallation --all -n $NAMESPACE --timeout=60s --ignore-not-found=true
+
+# Step 3: Wait for operator to finish cleanup
+echo "Waiting for operator to finish cleanup..."
+sleep 10
+
+# Step 4: Force remove finalizers if any resources are stuck
+CHI_STUCK=$(kubectl get clickhouseinstallation -n $NAMESPACE -o name 2>/dev/null)
+if [ -n "$CHI_STUCK" ]; then
+  echo "Forcing finalizer removal on stuck resources..."
+  echo "$CHI_STUCK" | xargs -I {} kubectl patch {} -n $NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge
+fi
+
+# Step 5: Delete the namespace
+echo "Deleting namespace..."
+kubectl delete namespace $NAMESPACE
+
+echo "Cleanup complete"
 ```

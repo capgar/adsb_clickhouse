@@ -17,26 +17,10 @@ CREATE USER IF NOT EXISTS adsb_query ON CLUSTER `adsb-data`
 -- ============================================================================
 
 -- Ingestion user: SELECT and INSERT on all tables
-GRANT SELECT, INSERT ON adsb.positions_local TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_regional TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_global TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_local_replacing TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_regional_replacing TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_global_replacing TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_local_latest TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_regional_latest TO adsb_ingest ON CLUSTER `adsb-data`;
-GRANT SELECT, INSERT ON adsb.positions_global_latest TO adsb_ingest ON CLUSTER `adsb-data`;
+GRANT SELECT, INSERT ON adsb.* TO adsb_ingest ON CLUSTER `adsb-data`;
 
 -- Query user: SELECT only on all tables
-GRANT SELECT ON adsb.positions_local TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_regional TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_global TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_local_replacing TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_regional_replacing TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_global_replacing TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_local_latest TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_regional_latest TO adsb_query ON CLUSTER `adsb-data`;
-GRANT SELECT ON adsb.positions_global_latest TO adsb_query ON CLUSTER `adsb-data`;
+GRANT SELECT ON adsb.* TO adsb_query ON CLUSTER `adsb-data`;
 GRANT SELECT ON system.* TO adsb_query on cluster `adsb-data`;
 
 -- ============================================================================

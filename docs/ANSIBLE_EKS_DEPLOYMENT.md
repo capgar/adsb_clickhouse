@@ -15,6 +15,8 @@ Ansible playbooks for automating ADSB ClickHouse deployment to AWS EKS.
 
 3. AWS credentials configured:
    aws configure
+
+   test with:
    aws sts get-caller-identity
 
 4. TLS Certificates
@@ -54,6 +56,11 @@ aws_region: us-east-1           # Your AWS region
 eks_cluster_name: adsb-eks-lab  # Your cluster name
 clickhouse_shards: 2            # Number of shards
 clickhouse_replicas: 2          # Replicas per shard
+...
+# Monitoring Configuration
+grafana_admin_user: admin
+grafana_admin_password: "YOUR_SECURE_PASSWORD_HERE"  # Change this!
+clickhouse_query_password: "YOUR_CLICKHOUSE_PASSWORD_HERE"  # Change this!
 ```
 
 ## Usage
@@ -63,8 +70,11 @@ clickhouse_replicas: 2          # Replicas per shard
 Deploy everything (infrastructure + applications):
 
 ```bash
+cd adsb-ansible
 ansible-playbook -i inventory/eks.yml site.yml
 ```
+During terraform apply phase, automation currently outputs ASYNC POLL lines.  To see in more detail
+what terraform is doing, in another terminal tail -f /tmp/terraform-apply.log
 
 ### Partial Deployment
 
@@ -252,3 +262,7 @@ For issues with:
 - **Terraform**: Check `../adsb-eks-terraform/`
 - **Kubernetes manifests**: Check `../manifests/clickhouse/`
 - **ClickHouse**: Check operator logs: `kubectl logs -n kube-system -l app=clickhouse-operator`
+
+### Check Prometheus targets
+kubectl port-forward -n adsb-monitoring svc/prometheus 9090:9090
+http://localhost:9090/targets

@@ -72,7 +72,7 @@
 - name: Deploy ClickHouse Keeper
   block:
     - name: Apply Keeper manifest
-      command: kubectl apply -f {{ manifests_dir }}/clickhouse/20-keeper-eks.yaml
+      command: kubectl apply -f {{ manifests_dir }}/adsb-clickhouse/20-keeper-eks.yaml
       environment: "{{ kubectl_env }}"
       register: keeper_deploy
       changed_when: "'created' in keeper_deploy.stdout or 'configured' in keeper_deploy.stdout"
@@ -81,10 +81,18 @@
       shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper --no-headers | wc -l
       environment: "{{ kubectl_env }}"
       register: keeper_pod_count
-      until: keeper_pod_count.stdout | int >= {{ clickhouse_keeper_replicas }}
+      until: (keeper_pod_count.stdout | int) >= (clickhouse_keeper_replicas | int)
       retries: 60
       delay: 3
       changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Verify expected Keeper pod count achieved
+      assert:
+        that: (keeper_pod_count.stdout | int) >= (clickhouse_keeper_replicas | int)
+        fail_msg: "Timeout waiting for Keeper pods. Expected {{ clickhouse_keeper_replicas }}, found {{ keeper_pod_count.stdout }}"
+        success_msg: "All {{ keeper_pod_count.stdout }} Keeper pods created successfully"
 
     - name: Wait for Keeper pods to be ready
       command: >
@@ -95,6 +103,10 @@
       environment: "{{ kubectl_env }}"
       register: keeper_ready
       changed_when: false
+      failed_when: false
+      no_log: true
+      failed_when: false
+      no_log: true
 
     - name: Verify Keeper cluster
       command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper
@@ -111,7 +123,7 @@
 - name: Deploy ClickHouse cluster
   block:
     - name: Apply ClickHouse manifest
-      command: kubectl apply -f {{ manifests_dir }}/clickhouse/30-clickhouse-eks.yaml
+      command: kubectl apply -f {{ manifests_dir }}/adsb-clickhouse/30-clickhouse-eks.yaml
       environment: "{{ kubectl_env }}"
       register: clickhouse_deploy
       changed_when: "'created' in clickhouse_deploy.stdout or 'configured' in clickhouse_deploy.stdout"
@@ -120,10 +132,19 @@
       shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data --no-headers | wc -l
       environment: "{{ kubectl_env }}"
       register: clickhouse_pod_count
-      until: clickhouse_pod_count.stdout | int >= {{ clickhouse_shards * clickhouse_replicas }}
-      retries: 30
+      until: (clickhouse_pod_count.stdout | int) >= (clickhouse_shards | int * clickhouse_replicas | int)
+      retries: 60
       delay: 2
       changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Verify expected ClickHouse pod count achieved
+      assert:
+        that: (clickhouse_pod_count.stdout | int) >= (clickhouse_shards | int * clickhouse_replicas | int)
+        fail_msg: "Timeout waiting for ClickHouse pods. Expected {{ clickhouse_shards | int * clickhouse_replicas | int }}, found {{ clickhouse_pod_count.stdout }}"
+        success_msg: "All {{ clickhouse_pod_count.stdout }} ClickHouse pods created successfully"
+
 
     - name: Check for pending pods (informational)
       shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o jsonpath='{.items[?(@.status.phase=="Pending")].metadata.name}'
@@ -161,6 +182,8 @@
       environment: "{{ kubectl_env }}"
       register: clickhouse_ready
       changed_when: false
+      failed_when: false
+      no_log: true
 
     - name: Display final ClickHouse status
       command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o wide

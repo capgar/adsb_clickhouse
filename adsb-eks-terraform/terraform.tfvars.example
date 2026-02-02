@@ -30,12 +30,13 @@ node_groups = {
   support_spot = {
     instance_types = ["t4g.small"]
     capacity_type  = "ON_DEMAND"
-    min_size       = 2
+    min_size       = 3
     max_size       = 3
     desired_size   = 3
     disk_size      = 20
     labels = {
-      adsb-clickhouse-keeper = "true"
+      adsb-clickhouse-keeper = "true",
+      adsb-monitoring = "true"
     }
   }
 }

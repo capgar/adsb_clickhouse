@@ -2,7 +2,7 @@
 # Deploy ClickHouse schema and users
 
 ---
-- name: Verify ClickHouse cluster is ready
+- name: Wait for ClickHouse cluster to be fully operational
   block:
     - name: Get first ClickHouse pod
       command: >
@@ -13,48 +13,27 @@
       register: first_pod
       changed_when: false
 
-    - name: Set ClickHouse pod name
+    - name: Set pod name for queries
       set_fact:
         clickhouse_pod: "{{ first_pod.stdout }}"
 
-    - name: Test ClickHouse connectivity
+    - name: Test distributed query capability
       command: >
         kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
-        clickhouse-client --query "SELECT 1"
+        clickhouse-client --query "SELECT count() FROM clusterAllReplicas('adsb-data', system.one)"
       environment: "{{ kubectl_env }}"
-      register: clickhouse_test
-      changed_when: false
-      retries: 5
+      register: cluster_test
+      until: (cluster_test.stdout | int) == (clickhouse_shards | int * clickhouse_replicas | int)
+      retries: 30
       delay: 10
-      until: clickhouse_test.rc == 0
-
-- name: Verify cluster configuration
-  block:
-    - name: Check cluster topology
-      command: >
-        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
-        clickhouse-client --query "SELECT * FROM system.clusters WHERE cluster = 'adsb-data' FORMAT Vertical"
-      environment: "{{ kubectl_env }}"
-      register: cluster_topology
       changed_when: false
+      failed_when: false
 
-    - name: Display cluster topology
-      debug:
-        msg: "{{ cluster_topology.stdout_lines }}"
-
-    - name: Verify Keeper connectivity
-      command: >
-        kubectl exec -n {{ clickhouse_namespace }} {{ clickhouse_pod }} --
-        clickhouse-client --query "SELECT count() FROM system.zookeeper WHERE path = '/'"
-      environment: "{{ kubectl_env }}"
-      register: keeper_test
-      changed_when: false
-
-    - name: Assert Keeper is working
+    - name: Verify cluster is operational
       assert:
-        that: keeper_test.stdout | int > 0
-        fail_msg: "Keeper is not accessible"
-        success_msg: "Keeper connectivity verified"
+        that: (cluster_test.stdout | int) == (clickhouse_shards | int * clickhouse_replicas | int)
+        fail_msg: "Cluster not ready for distributed queries. Expected {{ clickhouse_shards | int * clickhouse_replicas | int }} responses, got {{ cluster_test.stdout }}"
+        success_msg: "Cluster ready - all {{ cluster_test.stdout }} replicas responding to distributed queries"
 
 - name: Deploy schema files
   block:

@@ -56,6 +56,6 @@
           - "Region: {{ aws_region }}"
           - ""
           - "Next steps:"
-          - "1. Get ClickHouse endpoint: kubectl get svc clickhouse-adsb-data -n clickhouse"
-          - "2. Get Grafana endpoint: kubectl get svc grafana -n monitoring"
+          - "1. Get ClickHouse endpoint: kubectl get svc clickhouse-adsb-data -n adsb-clickhouse"
+          - "2. Get Grafana endpoint: kubectl get svc grafana -n adsb-monitoring"
           - "3. Check data ingestion: Run validation queries"

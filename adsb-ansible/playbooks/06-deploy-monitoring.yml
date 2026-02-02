@@ -1,79 +1,260 @@
 # playbooks/06-deploy-monitoring.yml
 # Deploy Prometheus, Grafana, and configure datasources
 ---
-- name: Install Prometheus Operator CRDs
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('url', item, split_lines=False) }}"
-  loop:
-    - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.70.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
-    - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.70.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-    - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.70.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
-    - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.70.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+- name: Create monitoring namespace
+  block:
+    - name: Create monitoring namespace manifest
+      command: kubectl create namespace {{ monitoring_namespace }} --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: monitoring_ns_yaml
+      changed_when: false
 
-- name: Wait for CRDs to be established
-  kubernetes.core.k8s_info:
-    api_version: apiextensions.k8s.io/v1
-    kind: CustomResourceDefinition
-    name: "{{ item }}"
-  register: crd_info
-  until: crd_info.resources[0].status.conditions | selectattr('type', 'equalto', 'Established') | map(attribute='status') | list | first == 'True'
-  retries: 10
-  delay: 5
-  loop:
-    - prometheuses.monitoring.coreos.com
-    - servicemonitors.monitoring.coreos.com
-    - podmonitors.monitoring.coreos.com
-    - prometheusrules.monitoring.coreos.com
+    - name: Apply monitoring namespace
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ monitoring_ns_yaml.stdout }}"
+      register: monitoring_ns
+      changed_when: "'created' in monitoring_ns.stdout or 'configured' in monitoring_ns.stdout"
+
+- name: Install Prometheus Operator CRDs
+  block:
+    - name: Apply Prometheus CRDs with server-side apply
+      command: >
+        kubectl apply --server-side -f {{ item }}
+      environment: "{{ kubectl_env }}"
+      loop:
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
+        - https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/{{ prometheus_operator_version }}/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
+      register: crd_install
+      changed_when: "'created' in crd_install.stdout or 'configured' in crd_install.stdout"
+
+    - name: Wait for CRDs to be established
+      command: kubectl get crd {{ item }} -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
+      environment: "{{ kubectl_env }}"
+      register: crd_status
+      until: crd_status.stdout == 'True'
+      retries: 10
+      delay: 5
+      changed_when: false
+      loop:
+        - prometheuses.monitoring.coreos.com
+        - servicemonitors.monitoring.coreos.com
+        - podmonitors.monitoring.coreos.com
 
 - name: Deploy Prometheus Operator
-  kubernetes.core.k8s:
-    state: present
-    src: "manifests/monitoring/05-prometheus-operator.yaml"
+  block:
+    - name: Apply Prometheus Operator manifest
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/10-prometheus-operator.yaml
+      environment: "{{ kubectl_env }}"
+      register: operator_deploy
+      changed_when: "'created' in operator_deploy.stdout or 'configured' in operator_deploy.stdout"
 
-- name: Wait for Prometheus Operator to be ready
-  kubernetes.core.k8s_info:
-    api_version: apps/v1
-    kind: Deployment
-    name: prometheus-operator
-    namespace: monitoring
-  register: operator_info
-  until: operator_info.resources[0].status.availableReplicas | default(0) >= 1
-  retries: 30
-  delay: 10
+    - name: Wait for Prometheus Operator to be ready
+      command: >
+        kubectl wait --for=condition=available --timeout=300s
+        deployment/prometheus-operator
+        -n {{ monitoring_namespace }}
+      environment: "{{ kubectl_env }}"
+      register: operator_ready
+      changed_when: false
+
+    - name: Verify Prometheus Operator
+      command: kubectl get deployment prometheus-operator -n {{ monitoring_namespace }}
+      environment: "{{ kubectl_env }}"
+      register: operator_status
+      changed_when: false
+
+    - name: Display Prometheus Operator status
+      debug:
+        msg: "{{ operator_status.stdout_lines }}"
 
 - name: Deploy Prometheus instance
-  kubernetes.core.k8s:
-    state: present
-    src: "manifests/monitoring/15-prometheus.yaml"
+  block:
+    - name: Apply Prometheus manifest
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/11-prometheus-eks.yaml
+      environment: "{{ kubectl_env }}"
+      register: prometheus_deploy
+      changed_when: "'created' in prometheus_deploy.stdout or 'configured' in prometheus_deploy.stdout"
+
+    - name: Wait for Prometheus StatefulSet to be ready
+      command: >
+        kubectl rollout status statefulset/prometheus-prometheus
+        -n {{ monitoring_namespace }}
+        --timeout={{ pod_ready_timeout }}s
+      environment: "{{ kubectl_env }}"
+      register: prometheus_ready
+      changed_when: false
+
+    - name: Get Prometheus service
+      command: kubectl get svc prometheus -n {{ monitoring_namespace }}
+      environment: "{{ kubectl_env }}"
+      register: prometheus_svc
+      changed_when: false
+
+    - name: Display Prometheus status
+      debug:
+        msg:
+          - "Prometheus deployed"
+          - "{{ prometheus_svc.stdout_lines }}"
+
+- name: Deploy ServiceMonitors
+  block:
+    - name: Apply ClickHouse Operator ServiceMonitor
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/12-servicemonitor-operator.yaml
+      environment: "{{ kubectl_env }}"
+      register: sm_operator
+      changed_when: "'created' in sm_operator.stdout or 'configured' in sm_operator.stdout"
+
+    - name: Apply ClickHouse Server ServiceMonitor
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/13-servicemonitor-clickhouse.yaml
+      environment: "{{ kubectl_env }}"
+      register: sm_clickhouse
+      changed_when: "'created' in sm_clickhouse.stdout or 'configured' in sm_clickhouse.stdout"
+
+    - name: Apply ClickHouse Keeper ServiceMonitor
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/14-servicemonitor-keeper.yaml
+      environment: "{{ kubectl_env }}"
+      register: sm_keeper
+      changed_when: "'created' in sm_keeper.stdout or 'configured' in sm_keeper.stdout"
+
+    - name: Verify ServiceMonitors
+      command: kubectl get servicemonitor -A
+      environment: "{{ kubectl_env }}"
+      register: servicemonitors
+      changed_when: false
+
+    - name: Display ServiceMonitor status
+      debug:
+        msg:
+          - "ServiceMonitors deployed:"
+          - "{{ servicemonitors.stdout_lines }}"
+
+- name: Download and prepare Altinity dashboard
+  block:
+    - name: Create local dashboards directory
+      file:
+        path: "{{ dashboards_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Download Altinity ClickHouse Operator Dashboard
+      get_url:
+        url: "{{ altinity_dashboard_url }}"
+        dest: "{{ dashboards_dir }}/altinity-clickhouse-operator-dashboard.json"
+        mode: '0644'
+        force: yes
+      register: dashboard_download
+
+    - name: Fix datasource variables in dashboard
+      replace:
+        path: "{{ dashboards_dir }}/altinity-clickhouse-operator-dashboard.json"
+        regexp: "{{ item.pattern }}"
+        replace: "{{ item.replacement }}"
+      loop:
+        - { pattern: '\$\{DS_PROMETHEUS\}', replacement: 'Prometheus' }
+        - { pattern: '\$\{DS_CLICKHOUSE\}', replacement: 'ClickHouse' }
+      when: dashboard_download.changed
+
+    - name: Remove __inputs section from dashboard
+      shell: |
+        sed -i '/"__inputs":/,/],/d' {{ dashboards_dir }}/altinity-clickhouse-operator-dashboard.json
+      when: dashboard_download.changed
+      changed_when: false
 
 - name: Deploy Grafana configuration
   block:
-    - name: Apply Grafana datasource ConfigMap
-      command: kubectl apply -f {{ manifests_dir }}/monitoring/10-grafana-config-eks.yaml
+    - name: Create Grafana datasources ConfigMap from template
+      template:
+        src: ../templates/20-grafana-config.yaml.j2
+        dest: /tmp/grafana-config.yaml
+      vars:
+        clickhouse_password: "{{ clickhouse_query_password }}"
+
+    - name: Apply Grafana datasources ConfigMap
+      command: kubectl apply -f /tmp/grafana-config.yaml
       environment: "{{ kubectl_env }}"
       register: grafana_config
       changed_when: "'created' in grafana_config.stdout or 'configured' in grafana_config.stdout"
 
-    - name: Apply Grafana deployment
-      command: kubectl apply -f {{ manifests_dir }}/monitoring/20-grafana-eks.yaml
+    - name: Create Altinity dashboard ConfigMap
+      command: >
+        kubectl create configmap altinity-dashboards
+        --from-file={{ dashboards_dir }}/altinity-clickhouse-operator-dashboard.json
+        -n {{ monitoring_namespace }}
+        --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: altinity_cm_yaml
+      changed_when: false
+
+    - name: Apply Altinity dashboard ConfigMap
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ altinity_cm_yaml.stdout }}"
+      register: altinity_cm
+      changed_when: "'created' in altinity_cm.stdout or 'configured' in altinity_cm.stdout"
+
+    - name: Find ADS-B dashboard files
+      find:
+        paths: "{{ dashboards_dir }}/adsb"
+        patterns: "*.json"
+      register: adsb_dashboard_files
+      when: dashboards_dir is defined
+
+    - name: Create ADS-B dashboards ConfigMap
+      command: >
+        kubectl create configmap adsb-dashboards
+        --from-file={{ dashboards_dir }}/adsb/
+        -n {{ monitoring_namespace }}
+        --dry-run=client -o yaml
+      environment: "{{ kubectl_env }}"
+      register: adsb_cm_yaml
+      changed_when: false
+      when: adsb_dashboard_files.matched > 0
+
+    - name: Apply ADS-B dashboards ConfigMap
+      command: kubectl apply -f -
+      environment: "{{ kubectl_env }}"
+      args:
+        stdin: "{{ adsb_cm_yaml.stdout }}"
+      register: adsb_cm
+      changed_when: "'created' in adsb_cm.stdout or 'configured' in adsb_cm.stdout"
+      when: adsb_dashboard_files.matched > 0
+
+    - name: Display dashboard ConfigMap status
+      debug:
+        msg:
+          - "Dashboard ConfigMaps created:"
+          - "  Altinity: {{ altinity_cm.stdout if altinity_cm.changed else 'already exists' }}"
+          - "  ADS-B: {{ adsb_dashboard_files.matched }} dashboard(s) from {{ dashboards_dir }}/adsb/"
+
+- name: Deploy Grafana
+  block:
+    - name: Apply Grafana StatefulSet
+      command: kubectl apply -f {{ manifests_dir }}/adsb-monitoring/25-grafana-eks.yaml
       environment: "{{ kubectl_env }}"
       register: grafana_deploy
       changed_when: "'created' in grafana_deploy.stdout or 'configured' in grafana_deploy.stdout"
 
-- name: Wait for Grafana to be ready
-  block:
-    - name: Wait for Grafana pod
+    - name: Wait for Grafana StatefulSet to be ready
       command: >
-        kubectl wait --for=condition=ready pod
-        -l app=grafana
+        kubectl rollout status statefulset/grafana
         -n {{ monitoring_namespace }}
         --timeout={{ pod_ready_timeout }}s
       environment: "{{ kubectl_env }}"
       register: grafana_ready
       changed_when: false
 
-    - name: Get Grafana pod
+    - name: Get Grafana pod name
       command: >
         kubectl get pods -n {{ monitoring_namespace }}
         -l app=grafana
@@ -81,6 +262,42 @@
       environment: "{{ kubectl_env }}"
       register: grafana_pod
       changed_when: false
+
+- name: Mount dashboards in Grafana pod
+  block:
+    - name: Create dashboard directories in Grafana pod
+      command: >
+        kubectl exec {{ grafana_pod.stdout }} -n {{ monitoring_namespace }} --
+        mkdir -p /var/lib/grafana/dashboards/clickhouse /var/lib/grafana/dashboards/adsb
+      environment: "{{ kubectl_env }}"
+      failed_when: false
+      changed_when: false
+
+    - name: Copy Altinity dashboard to Grafana pod
+      command: >
+        kubectl cp {{ dashboards_dir }}/altinity-clickhouse-operator-dashboard.json
+        {{ monitoring_namespace }}/{{ grafana_pod.stdout }}:/var/lib/grafana/dashboards/clickhouse/
+      environment: "{{ kubectl_env }}"
+      register: altinity_copy
+      changed_when: altinity_copy.rc == 0
+
+    - name: Copy ADS-B dashboards to Grafana pod
+      command: >
+        kubectl cp {{ item.path }}
+        {{ monitoring_namespace }}/{{ grafana_pod.stdout }}:/var/lib/grafana/dashboards/adsb/
+      environment: "{{ kubectl_env }}"
+      loop: "{{ adsb_dashboard_files.files }}"
+      when: adsb_dashboard_files.matched > 0
+      register: adsb_copy
+      changed_when: adsb_copy.rc == 0
+
+    - name: Display dashboard copy status
+      debug:
+        msg:
+          - "Dashboards copied to Grafana:"
+          - "  Altinity: 1 dashboard"
+          - "  ADS-B: {{ adsb_dashboard_files.matched }} dashboard(s)"
+      when: adsb_dashboard_files.matched > 0
 
 - name: Get Grafana service endpoint
   block:
@@ -102,41 +319,24 @@
     - name: Display Grafana access info
       debug:
         msg:
-          - "Grafana deployed"
-          - "Endpoint: {{ grafana_endpoint | default('Use port-forward or NodePort') }}"
-          - "Default credentials: {{ grafana_admin_user }} / {{ grafana_admin_password }}"
+          - "=== Monitoring Stack Deployed ==="
           - ""
-          - "Access via port-forward:"
-          - "kubectl port-forward -n {{ monitoring_namespace }} svc/grafana 3000:80"
-
-- name: Deploy Grafana dashboards
-  block:
-    - name: Check if dashboards directory exists
-      stat:
-        path: "{{ dashboards_dir }}"
-      register: dashboards_dir_check
-
-    - name: Ensure dashboard directory exists in Grafana pod
-      command: >
-        kubectl exec {{ grafana_pod.stdout }} -n {{ monitoring_namespace }} --
-        mkdir -p /var/lib/grafana/dashboards
-      environment: "{{ kubectl_env }}"
-      when: dashboards_dir_check.stat.exists
-      failed_when: false
-
-    - name: Copy dashboards to Grafana pod
-      command: >
-        kubectl cp {{ item }}
-        {{ monitoring_namespace }}/{{ grafana_pod.stdout }}:/var/lib/grafana/dashboards/
-      environment: "{{ kubectl_env }}"
-      with_fileglob:
-        - "{{ dashboards_dir }}/adsb/*.json"
-      when: dashboards_dir_check.stat.exists
-      register: dashboard_copy
-      failed_when: false
-
-    - name: Display dashboard deployment status
-      debug:
-        msg: "{{ dashboard_copy.results | length }} dashboards copied to Grafana"
-      when: dashboards_dir_check.stat.exists
-  when: dashboards_dir is defined
+          - "Prometheus:"
+          - "  Service: kubectl get svc prometheus -n {{ monitoring_namespace }}"
+          - "  UI: kubectl port-forward -n {{ monitoring_namespace }} svc/prometheus 9090:9090"
+          - "  Access at: http://localhost:9090"
+          - ""
+          - "Grafana:"
+          - "  Endpoint: {{ grafana_endpoint | default('Use port-forward or NodePort') }}"
+          - "  Credentials: admin / admin (change after initial login)"
+          - "  Port-forward: kubectl port-forward -n {{ monitoring_namespace }} svc/grafana 3000:80"
+          - "  Access at: http://localhost:3000"
+          - ""
+          - "ServiceMonitors:"
+          - "  - ClickHouse Operator (kube-system)"
+          - "  - ClickHouse Servers ({{ clickhouse_namespace }})"
+          - "  - ClickHouse Keeper ({{ clickhouse_namespace }})"
+          - ""
+          - "Dashboards:"
+          - "  - Altinity ClickHouse Operator (folder: ClickHouse)"
+          - "  - ADS-B Custom Dashboards (folder: ADS-B, {{ adsb_dashboard_files.matched | default(0) }} dashboards)"

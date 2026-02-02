@@ -37,7 +37,11 @@ Generally, you will need to run your scrapers from the same location (public IP)
 
 
 ## Setup
-For EKS deployments of Clickhouse and monitoring components, refer to docs/ANSIBLE_EKS_DEPLOYMENT.md
+For EKS deployments of Clickhouse and monitoring components:
+- docs/ANSIBLE_EKS_DEPLOYMENT.md
+
 This requires that you have access to a kafka/redpanda cluster, and TLS keypairs for client authentication (see certs/README.md)
 
-For local k8s/k3s/etc lab deployments, including Kafka and the adsb scraper/producers, review docs/LOCAL_DEPLOYMENT.md
+For local k8s/k3s/etc lab deployments, including Kafka and the adsb scraper/producers, review:
+- docs/K8S_KAFKA_SCRAPERS.md
+- docs/K8S_CLICKHOUSE.md

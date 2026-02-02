@@ -1,40 +1,29 @@
 # group_vars/eks.yml
 # Variables for EKS deployment
 
----
-# AWS/EKS Configuration
-aws_region: us-east-2
+# AWS Configuration
+aws_region: us-east-1
 eks_cluster_name: adsb-eks-lab
-eks_cluster_version: "1.32"
+
+# Project paths (adjust to your repo structure)
+project_root: "{{ playbook_dir }}/.."
+terraform_dir: "{{ project_root }}/adsb-eks-terraform"
+manifests_dir: "{{ project_root }}/manifests"
+schema_dir: "{{ project_root }}/schema"
+certs_dir: "{{ project_root }}/certs"
+dashboards_dir: "{{ project_root }}/dashboards"
 
 # Kubernetes Namespaces
-clickhouse_namespace: clickhouse
-monitoring_namespace: monitoring
+clickhouse_namespace: adsb-clickhouse
+monitoring_namespace: adsb-monitoring
 
 # ClickHouse Configuration
-clickhouse_cluster_name: adsb-data
 clickhouse_shards: 2
 clickhouse_replicas: 2
 clickhouse_keeper_replicas: 3
+clickhouse_service_type: LoadBalancer
 
-# ClickHouse Operator
-clickhouse_operator_version: "0.25.6"  # Will be fetched dynamically
-
-# Service Types
-clickhouse_service_type: LoadBalancer  # or NodePort
-grafana_service_type: LoadBalancer     # or NodePort
-
-# Timeouts (seconds)
-terraform_timeout: 1200  # 20 minutes
-pod_ready_timeout: 600   # 10 minutes
-operator_ready_timeout: 300  # 5 minutes
-
-# Validation Settings
-validate_data_ingestion: true
-validate_replication: true
-validate_kafka_connectivity: true
-
-# Kafka/TLS Configuration
+# Kafka TLS Configuration
 kafka_tls_secret_name: kafka-client-tls
 kafka_ca_cert: "{{ certs_dir }}/ca.crt"
 kafka_client_cert: "{{ certs_dir }}/client.crt"
@@ -45,6 +34,24 @@ schema_files:
   - "{{ schema_dir }}/schema.sql"
   - "{{ schema_dir }}/users.sql"
 
+# Monitoring Configuration
+clickhouse_query_password: "YOUR_CLICKHOUSE_PASSWORD_HERE"  # Change this!
+
+# Prometheus Operator version
+prometheus_operator_version: v0.70.0
+
 # Grafana Configuration
-grafana_admin_user: admin
-grafana_admin_password: admin  # Change for production!
+grafana_service_type: LoadBalancer
+
+# Altinity Dashboard
+altinity_dashboard_url: "https://grafana.com/api/dashboards/12163/revisions/3/download"
+altinity_dashboard_id: 12163
+
+# Timeouts
+pod_ready_timeout: 600
+terraform_timeout: 3600
+
+# Validation flags
+validate_replication: true
+validate_kafka_connectivity: true
+validate_data_ingestion: true

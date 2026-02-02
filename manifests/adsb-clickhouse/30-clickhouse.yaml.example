@@ -27,7 +27,7 @@ spec:
     users:
       default/networks/ip:
         - "127.0.0.1"
-      admin/password_sha256_hex: <sha256_hex_value>
+      admin/password_sha256_hex: <PASSWORD SHA256>
       admin/networks/ip:
         - "::/0"
       admin/access_management: "1"
@@ -40,7 +40,7 @@ spec:
             <named_collections>
                 <kafka_local>
                     <!-- ClickHouse Kafka engine parameters -->
-                    <kafka_broker_list>lab.url:30192</kafka_broker_list>
+                    <kafka_broker_list><LAB URL>:30192</kafka_broker_list>
                     <kafka_topic_list>flights-local</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-local</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
@@ -62,7 +62,7 @@ spec:
                     </kafka>
                 </kafka_local>
                 <kafka_regional>
-                    <kafka_broker_list>lab.url:30192</kafka_broker_list>
+                    <kafka_broker_list><LAB URL>:30192</kafka_broker_list>
                     <kafka_topic_list>flights-regional</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-regional</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
@@ -83,7 +83,7 @@ spec:
                     </kafka>
                 </kafka_regional>
                 <kafka_global>
-                    <kafka_broker_list>lab.url:30192</kafka_broker_list>
+                    <kafka_broker_list><LAB URL>:30192</kafka_broker_list>
                     <kafka_topic_list>flights-global</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-global</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
@@ -111,6 +111,7 @@ spec:
       default/joined_subquery_requires_alias: "0"
 
   defaults:
+    replicasUseFQDN: "yes"
     templates:
       podTemplate: clickhouse-pod
       dataVolumeClaimTemplate: data-volume
@@ -141,15 +142,15 @@ spec:
                 - name: kafka-tls-certs
                   mountPath: /etc/clickhouse-kafka-tls
                   readOnly: true
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
           volumes:
             - name: kafka-tls-certs
               secret:
                 secretName: kafka-client-tls
                 defaultMode: 288
-          securityContext:
-            runAsUser: 101
-            runAsGroup: 101
-            fsGroup: 101
 
     serviceTemplates:
       - name: external-service

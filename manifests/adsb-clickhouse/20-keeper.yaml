@@ -24,7 +24,6 @@ spec:
     - name: prometheus
       port: 9234
       targetPort: 9234
-
 ---
 apiVersion: clickhouse-keeper.altinity.com/v1
 kind: ClickHouseKeeperInstallation
@@ -64,14 +63,24 @@ spec:
       - name: keeper-pod
         spec:
           affinity:
-            # Prefer designated nodes
             nodeAffinity:
+            # Prefer designated nodes
               preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 100
                   preference:
                     matchExpressions:
                       - key: adsb-clickhouse-keeper
                         operator: Exists
+            podAntiAffinity:
+              # Spread Keeper pods across different nodes for HA
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: clickhouse-keeper.altinity.com/chk
+                        operator: In
+                        values:
+                          - adsb-keeper
+                  topologyKey: kubernetes.io/hostname
           containers:
             - name: clickhouse-keeper
               image: altinity/clickhouse-keeper:25.3.8.10041.altinitystable

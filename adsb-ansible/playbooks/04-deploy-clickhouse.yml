@@ -77,47 +77,30 @@
       register: keeper_deploy
       changed_when: "'created' in keeper_deploy.stdout or 'configured' in keeper_deploy.stdout"
 
-    - name: Wait for Keeper pods to be created
-      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper --no-headers | wc -l
+    - name: Informational message
+      debug:
+        msg: "Waiting for Keeper cluster to be ready (ignore 'FAILED - RETRYING' messages below - this is normal Ansible behavior)"
+
+    - name: Wait for Keeper CHK resource to be ready
+      shell: |
+        kubectl get chk adsb-keeper -n {{ clickhouse_namespace }} -o jsonpath='{.status.status}' 2>/dev/null || echo "NotFound"
       environment: "{{ kubectl_env }}"
-      register: keeper_pod_count
-      until: (keeper_pod_count.stdout | int) >= (clickhouse_keeper_replicas | int)
+      register: keeper_status
+      until: keeper_status.stdout == "Completed"
       retries: 60
-      delay: 3
+      delay: 5
       changed_when: false
-      failed_when: false
-      no_log: true
 
-    - name: Verify expected Keeper pod count achieved
-      assert:
-        that: (keeper_pod_count.stdout | int) >= (clickhouse_keeper_replicas | int)
-        fail_msg: "Timeout waiting for Keeper pods. Expected {{ clickhouse_keeper_replicas }}, found {{ keeper_pod_count.stdout }}"
-        success_msg: "All {{ keeper_pod_count.stdout }} Keeper pods created successfully"
-
-    - name: Wait for Keeper pods to be ready
-      command: >
-        kubectl wait --for=condition=ready pod
-        -l clickhouse-keeper.altinity.com/chk=adsb-keeper
-        -n {{ clickhouse_namespace }}
-        --timeout={{ pod_ready_timeout }}s
-      environment: "{{ kubectl_env }}"
-      register: keeper_ready
-      changed_when: false
-      failed_when: false
-      no_log: true
-      failed_when: false
-      no_log: true
-
-    - name: Verify Keeper cluster
+    - name: Display Keeper status
       command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse-keeper.altinity.com/chk=adsb-keeper
       environment: "{{ kubectl_env }}"
       register: keeper_pods
       changed_when: false
 
-    - name: Display Keeper status
+    - name: Confirm Keeper deployment
       debug:
         msg:
-          - "Keeper cluster deployed"
+          - "✓ Keeper cluster deployed successfully"
           - "{{ keeper_pods.stdout_lines }}"
 
 - name: Deploy ClickHouse cluster
@@ -128,74 +111,31 @@
       register: clickhouse_deploy
       changed_when: "'created' in clickhouse_deploy.stdout or 'configured' in clickhouse_deploy.stdout"
 
-    - name: Wait for ClickHouse pods to be created
-      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data --no-headers | wc -l
-      environment: "{{ kubectl_env }}"
-      register: clickhouse_pod_count
-      until: (clickhouse_pod_count.stdout | int) >= (clickhouse_shards | int * clickhouse_replicas | int)
-      retries: 60
-      delay: 2
-      changed_when: false
-      failed_when: false
-      no_log: true
-
-    - name: Verify expected ClickHouse pod count achieved
-      assert:
-        that: (clickhouse_pod_count.stdout | int) >= (clickhouse_shards | int * clickhouse_replicas | int)
-        fail_msg: "Timeout waiting for ClickHouse pods. Expected {{ clickhouse_shards | int * clickhouse_replicas | int }}, found {{ clickhouse_pod_count.stdout }}"
-        success_msg: "All {{ clickhouse_pod_count.stdout }} ClickHouse pods created successfully"
-
-
-    - name: Check for pending pods (informational)
-      shell: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o jsonpath='{.items[?(@.status.phase=="Pending")].metadata.name}'
-      environment: "{{ kubectl_env }}"
-      register: pending_pods
-      changed_when: false
-
-    - name: Show pending pod details if any
-      shell: |
-        for pod in {{ pending_pods.stdout }}; do
-          echo "=== Pod: $pod ==="
-          kubectl describe pod $pod -n {{ clickhouse_namespace }} | grep -A 10 "Events:"
-        done
-      environment: "{{ kubectl_env }}"
-      when: pending_pods.stdout != ""
-      register: pending_pod_details
-      changed_when: false
-      failed_when: false
-
-    - name: Display pending pod info
+    - name: Informational message
       debug:
-        msg: |
-          Note: {{ pending_pods.stdout.split() | length }} pod(s) currently Pending.
-          This is normal during startup (volume attachment, image pull).
-          
-          {{ pending_pod_details.stdout | default('') }}
-      when: pending_pods.stdout != ""
+        msg: "Waiting for ClickHouse cluster to be ready (ignore 'FAILED - RETRYING' messages below - this is normal Ansible behavior)"
 
-    - name: Wait for ClickHouse pods to be ready
-      command: >
-        kubectl wait --for=condition=ready pod
-        -l clickhouse.altinity.com/chi=adsb-data
-        -n {{ clickhouse_namespace }}
-        --timeout={{ pod_ready_timeout }}s
+    - name: Wait for ClickHouse CHI resource to be ready
+      shell: |
+        kubectl get chi adsb-data -n {{ clickhouse_namespace }} -o jsonpath='{.status.status}' 2>/dev/null || echo "NotFound"
       environment: "{{ kubectl_env }}"
-      register: clickhouse_ready
+      register: chi_status
+      until: chi_status.stdout == "Completed"
+      retries: 60
+      delay: 5
       changed_when: false
-      failed_when: false
-      no_log: true
 
-    - name: Display final ClickHouse status
+    - name: Display ClickHouse cluster status
       command: kubectl get pods -n {{ clickhouse_namespace }} -l clickhouse.altinity.com/chi=adsb-data -o wide
       environment: "{{ kubectl_env }}"
-      register: clickhouse_final_status
+      register: clickhouse_pods
       changed_when: false
 
-    - name: Show ClickHouse cluster
+    - name: Confirm ClickHouse deployment
       debug:
         msg:
           - "✓ ClickHouse cluster deployed ({{ clickhouse_shards }} shards × {{ clickhouse_replicas }} replicas)"
-          - "{{ clickhouse_final_status.stdout_lines }}"
+          - "{{ clickhouse_pods.stdout_lines }}"
 
 - name: Get ClickHouse service endpoint
   block:

@@ -882,141 +882,27 @@ WHERE scrape_time > now() - INTERVAL 2 HOUR;
 
 -- Local latest batch (all aircraft from most recent scrape, all shards)
 CREATE VIEW IF NOT EXISTS positions_local_latest ON CLUSTER `adsb-data` AS
-SELECT
-    icao24,
-    type,
-    callsign,
-    registration,
-    aircraft_type,
-    description,
-    lat,
-    lon,
-    alt_baro,
-    alt_geom,
-    ground_speed,
-    track,
-    vertical_rate,
-    squawk,
-    emergency,
-    category,
-    nav_qnh,
-    nav_altitude_mcp,
-    nic,
-    rc,
-    version,
-    nic_baro,
-    nac_p,
-    nac_v,
-    sil,
-    sil_type,
-    gva,
-    sda,
-    alert,
-    spi,
-    seen_pos,
-    seen,
-    rssi,
-    messages,
-    range_distance,
-    range_direction,
-    owner_operator,
-    year,
-    scrape_time,
-    ingestion_time
+SELECT *
 FROM positions_local_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 15 SECOND;
+WHERE scrape_time > now() - INTERVAL 15 SECOND
+ORDER BY icao24, scrape_time DESC
+LIMIT 1 BY icao24;
 
 -- Regional latest batch (all aircraft from most recent scrape, all shards)
 CREATE VIEW IF NOT EXISTS positions_regional_latest ON CLUSTER `adsb-data` AS
-SELECT
-    icao24,
-    type,
-    callsign,
-    registration,
-    aircraft_type,
-    description,
-    lat,
-    lon,
-    alt_baro,
-    alt_geom,
-    ground_speed,
-    track,
-    vertical_rate,
-    squawk,
-    emergency,
-    category,
-    nav_qnh,
-    nav_altitude_mcp,
-    nav_modes,
-    nic,
-    rc,
-    version,
-    nic_baro,
-    nac_p,
-    nac_v,
-    sil,
-    sil_type,
-    gva,
-    sda,
-    alert,
-    spi,
-    seen_pos,
-    seen,
-    rssi,
-    messages,
-    distance,
-    direction,
-    owner_operator,
-    year,
-    scrape_time,
-    ingestion_time
+SELECT *
 FROM positions_regional_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 1 MINUTE;
+WHERE scrape_time > now() - INTERVAL 1 MINUTE
+ORDER BY icao24, scrape_time DESC
+LIMIT 1 BY icao24;
 
 -- Global latest batch (all aircraft from most recent scrape, all shards)
 CREATE VIEW IF NOT EXISTS positions_global_latest ON CLUSTER `adsb-data` AS
-SELECT
-    icao24,
-    type,
-    callsign,
-    registration,
-    aircraft_type,
-    description,
-    lat,
-    lon,
-    alt_baro,
-    alt_geom,
-    ground_speed,
-    track,
-    vertical_rate,
-    squawk,
-    emergency,
-    category,
-    nav_qnh,
-    nav_altitude_mcp,
-    nav_modes,
-    nic,
-    rc,
-    version,
-    nic_baro,
-    nac_p,
-    nac_v,
-    sil,
-    sil_type,
-    gva,
-    sda,
-    alert,
-    spi,
-    seen_pos,
-    seen,
-    rssi,
-    messages,
-    distance,
-    direction,
-    scrape_time,
-    ingestion_time
+SELECT *
 FROM positions_global_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 5 MINUTE;
+WHERE scrape_time > now() - INTERVAL 5 MINUTE
+ORDER BY icao24, scrape_time DESC
+LIMIT 1 BY icao24;
 
 
 -- ============================================================================

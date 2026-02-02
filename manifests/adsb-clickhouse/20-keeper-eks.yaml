@@ -1,6 +1,4 @@
 # 20-keeper.yaml (EKS version)
-# ClickHouse Keeper - 3 node cluster for HA
-
 ---
 apiVersion: v1
 kind: Service
@@ -73,14 +71,17 @@ spec:
                         operator: Exists
             podAntiAffinity:
               # Spread Keeper pods across different nodes for HA
-              requiredDuringSchedulingIgnoredDuringExecution:
-                - labelSelector:
-                    matchExpressions:
-                      - key: clickhouse-keeper.altinity.com/chk
-                        operator: In
-                        values:
-                          - adsb-keeper
-                  topologyKey: kubernetes.io/hostname
+              # optional to allow for single instance labs
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: clickhouse-keeper.altinity.com/chk
+                          operator: In
+                          values:
+                            - adsb-keeper
+                    topologyKey: kubernetes.io/hostname
           # Spread across availability zones
           topologySpreadConstraints:
             - maxSkew: 1

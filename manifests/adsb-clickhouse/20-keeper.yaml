@@ -1,6 +1,4 @@
 # ClickHouse Keeper
-# Single-node Keeper for ClickHouse coordination
-
 ---
 apiVersion: v1
 kind: Service
@@ -64,7 +62,7 @@ spec:
         spec:
           affinity:
             nodeAffinity:
-            # Prefer designated nodes
+              # Prefer designated nodes
               preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 100
                   preference:
@@ -73,14 +71,17 @@ spec:
                         operator: Exists
             podAntiAffinity:
               # Spread Keeper pods across different nodes for HA
-              requiredDuringSchedulingIgnoredDuringExecution:
-                - labelSelector:
-                    matchExpressions:
-                      - key: clickhouse-keeper.altinity.com/chk
-                        operator: In
-                        values:
-                          - adsb-keeper
-                  topologyKey: kubernetes.io/hostname
+              # optional to allow for single instance labs
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: clickhouse-keeper.altinity.com/chk
+                          operator: In
+                          values:
+                            - adsb-keeper
+                    topologyKey: kubernetes.io/hostname
           containers:
             - name: clickhouse-keeper
               image: altinity/clickhouse-keeper:25.3.8.10041.altinitystable

@@ -4,7 +4,8 @@ certs/**
 
 # Environment-specific manifests
 manifests/adsb-clickhouse/10-secrets-kafka-tls.yaml
-manifests/adsb-clickhouse/20-keeper-laptop.yaml
+manifests/adsb-clickhouse/20-keeper-*.yaml
+!manifests/adsb-clickhouse/20-keeper-eks.yaml
 manifests/adsb-clickhouse/30-clickhouse*.yaml
 manifests/adsb-kafka/10-secrets.yaml
 manifests/adsb-kafka/30-kafka.yaml

@@ -34,9 +34,11 @@ dashboards/adsb/*.json
 # OS
 .DS_Store
 Thumbs.db
+*Zone.Identifier
 
 # Working
 working/**
+temp/**
 old/**
 *.old
 

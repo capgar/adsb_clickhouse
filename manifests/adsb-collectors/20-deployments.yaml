@@ -13,7 +13,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: adsb-scraper-local
-  namespace: adsb-scrapers
+  namespace: adsb-collectors
   labels:
     app: adsb-scraper
     source: local
@@ -37,7 +37,7 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: adsb-scrapers
+                  - key: adsb-collectors
                     operator: Exists
       
       containers:
@@ -77,7 +77,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: adsb-scraper-regional
-  namespace: adsb-scrapers
+  namespace: adsb-collectors
   labels:
     app: adsb-scraper
     source: regional
@@ -101,7 +101,7 @@ spec:
               - weight: 100
                 preference:
                   matchExpressions:
-                    - key: adsb-scrapers
+                    - key: adsb-collectors
                       operator: Exists
       
       containers:
@@ -138,7 +138,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: adsb-scraper-global
-  namespace: adsb-scrapers
+  namespace: adsb-collectors
   labels:
     app: adsb-scraper
     source: global

@@ -18,6 +18,7 @@ schema/users*.sql
 
 # Dashboards
 dashboards/altinity-clickhouse-operator-dashboard.json
+dashboards/adsb/**
 
 # Testing scripts
 *.sh

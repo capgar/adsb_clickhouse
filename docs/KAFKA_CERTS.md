@@ -10,6 +10,7 @@ tls.key (site key)
 example:
 curl -o ca.crt https://developers.cloudflare.com/ssl/static/origin_ca_rsa_root.pem
 
+
 ### Creation (assumes no existing files in ./certs other than README.md)
 NOTE: replace <ITEMS> as appropriate for your environment
 ```bash
@@ -50,6 +51,7 @@ base64 -w 0 ca.crt > ca.crt.b64
 base64 -w 0 client.crt > client.crt.b64
 base64 -w 0 client.key > client.key.b64
 ```
+
 
 ### Generating additional Clickhouse client keypairs
 ```bash

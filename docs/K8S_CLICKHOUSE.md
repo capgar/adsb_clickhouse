@@ -6,7 +6,8 @@ Tested in k3s, but should work in other Kubernetes environments.
 
 
 ### 1. Prepare Certificates
-This assumes you've already set up Kafka and have certs/keys available in the certs directory.
+This assumes you've already set up Kafka and have certs/keys available in the certs directory,
+or else have been given certs/keys to connect to an existing environment.
 See KAFKA_SCRAPERS_LOCAL_DEPLOYMENT.md
 
 ### 2. Apply lables to Nodes (optional)
@@ -27,23 +28,35 @@ Check node labels:
 kubectl get nodes --show-labels
 kubectl get nodes -l adsb-clickhouse=true
 
-## Deploying ClickHouse and Monitoring components
-The Ansible automation assumes deployment in EKS.  If you instead want to deploy locally in k8s/k3s/etc:
+### 3. Specify Clickhouse passwords
+./schema/
+- copy users.sql.example to users.sql
+- specify passwords for the adsb_ingest and adsb_query users, replacing "CHANGEME"
 
-### Prepare Manifests
-- copy manifests/10-secrets-kafka-tls.yaml.example to 10-secrets-kafka-tls.yaml
-- populate with the base64-encoded keypair values from step 1
-- copy schema/users.sql.example to schema/users.sql
-- update the passwords for the query and ingest users
-- copy manifests/10-grafana-config.yaml.example to 10-grafana-config.yaml
-- populate passwords for the query and ingest users
-- copy manifests/30-clickhouse.yaml.example to 30-clickhouse-local.yaml (or similar)
-- update the kafka broker lists, and the admin user password_sha256_hex
-- apply labels to nodes
+### 4. Customize manifests
+Some of the manifests require configuration for your environment
 
-### Download Prometheus CRDs
-From the adsb-ansible directory, run:
-  scripts/prometheus-crds.sh
+./manifests/adsb-clickhouse/
+  - 10-secrets-kafka-tls.yaml.example
+    - copy to 10-secrets-kafka-tls.yaml
+    - populate with the base64-encoded keypair values you created in step 1
+  - 30-clickhouse-local.yaml.example
+    - copy to 30-clickhouse-local.yaml
+    - replace the 3 instances of "lab.url:port" with the appropriate url:port (or comma-separated list) for your Kafka provider
+      <kafka_broker_list>lab.url:port</kafka_broker_list>
+    - replace <PASSWORD_SHA256> with the SHA256-encoded password for your clickhouse admin account
+      (generated with "echo -n mypassword | sha256sum")
+
+./manifests/adsb-monitoring/
+  - 20-grafana-config.yaml.example
+    - copy to 20-grafana-config.yaml
+    - populate passwords for the query and ingest users from step 3
+
+### 5. Customize dashboards
+./dashboards/templates/
+  - If using the example map dashboards, copy the 3 .json files to dashboards/adsb/
+  - in the Global and Local files, replace <LATITUDE> and <LONGITUDE> with the latitude and longitude values for your ADS-B receiver
+
 
 ### Deploy ClickHouse Stack
 ```bash
@@ -57,7 +70,7 @@ kubectl apply -f manifests/adsb-clickhouse/00-namespace.yaml
 kubectl apply -f manifests/adsb-clickhouse/10-secrets-kafka-tls.yaml
 
 # 4. Deploy Keeper
-kubectl apply -f manifests/adsb-clickhouse/20-keeper.yaml
+kubectl apply -f manifests/adsb-clickhouse/20-keeper-local.yaml
 kubectl get pods -n adsb-clickhouse -w
 
 # 5. Deploy Clickhouse
@@ -68,6 +81,7 @@ kubectl get pods -n adsb-clickhouse -w
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema.sql
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/users.sql
 ```
+
 
 ### Deploy Monitoring Stack
 ```bash
@@ -82,7 +96,7 @@ kubectl apply -f manifests/adsb-monitoring/10-prometheus-operator.yaml
 kubectl wait --for=condition=available --timeout=300s deployment/prometheus-operator -n adsb-monitoring
 
 # 4. Deploy Prometheus
-kubectl apply -f manifests/adsb-monitoring/11-prometheus.yaml
+kubectl apply -f manifests/adsb-monitoring/11-prometheus-local.yaml
 kubectl get pods -n adsb-monitoring -w
 
 # 5. Deploy service monitors
@@ -101,7 +115,7 @@ kubectl create configmap adsb-dashboards --from-file=./dashboards/adsb/ -n adsb-
 kubectl apply -f manifests/adsb-monitoring/20-grafana-config.yaml
 
 # 8. Deploy Grafana
-kubectl apply -f manifests/adsb-monitoring/25-grafana.yaml
+kubectl apply -f manifests/adsb-monitoring/25-grafana-local.yaml
 kubectl get pods -n adsb-monitoring -w
 ```
 

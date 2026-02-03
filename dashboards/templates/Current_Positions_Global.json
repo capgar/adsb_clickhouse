@@ -171,9 +171,9 @@
           "allLayers": false,
           "id": "coords",
           "lastOnly": false,
-          "lat": 39.23444,
+          "lat": <LATITUDE>,
           "layer": "Receiver",
-          "lon": -77.34185,
+          "lon": <LONGITUDE>,
           "noRepeat": true,
           "shared": true,
           "zoom": 4

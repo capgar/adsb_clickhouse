@@ -5,36 +5,64 @@ Ansible playbooks for automating ADSB ClickHouse deployment to AWS EKS.
 
 ## Prerequisites
 
-1. Ansible installed (tested with Ansible 2.9+)
+### 1. Ansible installed (tested with Ansible 2.9+)
 
-2. Required tools (validated by playbook):
-   - terraform >= 1.6
-   - kubectl
-   - aws-cli
-   - helm
+### 2. Required tools (validated by playbook):
+  - terraform >= 1.6
+  - kubectl
+  - aws-cli
+  - helm
 
-3. AWS credentials configured:
-   aws configure
+### 3. AWS credentials configured:
+  aws configure
 
-   test with:
-   aws sts get-caller-identity
+  test with:
+  aws sts get-caller-identity
 
-4. TLS Certificates
-If you are hosting your own Kafka/Redpanda cluster, ensure that the required certs
-and keys are created in the certs directory. See certs/README.md for details.
-certs/ca.crt"
-certs/client.crt"
-certs/client.key"
+### 4. TLS Certificates
+If you are hosting your own Kafka/Redpanda cluster and followed the ensure that the base64 encoded certs and keys are available in the certs directory
+in base64 encoded format (see docs/KAFKA_CERTS.md)
+./certs/ca.crt.b64
+./certs/client.crt.b64
+./certs/client.key.b64
 
-6. Users Schema File
-Copy schema/users.sql.example to users.sql, replacing the user passwords.
+Alternatively, if you are connecting to an external kafka cluster using MTLS, you will need the values from the above files.
+
+### 5. Users Schema File
+./schema/
+- copy users.sql.example to users.sql
+- specify passwords for the adsb_ingest and adsb_query users, replacing "CHANGEME"
+
+### 6. Customize Manifests
+Some of the manifests require configuration for your environment
+
+./manifests/adsb-clickhouse/
+  - 10-secrets-kafka-tls.yaml.example
+    - copy to 10-secrets-kafka-tls.yaml
+    - populate with the base64-encoded keypair values from step 4
+  - 30-clickhouse-eks.yaml.example
+    - copy to 30-clickhouse-eks.yaml
+    - replace the 3 instances of "lab.url:port" with the appropriate url:port (or comma-separated list) for your Kafka provider
+      <kafka_broker_list>lab.url:port</kafka_broker_list>
+    - replace <PASSWORD_SHA256> with the SHA256-encoded password for your clickhouse admin account
+      (generated with "echo -n mypassword | sha256sum")
+
+./manifests/adsb-monitoring/
+  - 20-grafana-config.yaml.example
+    - copy to 20-grafana-config.yaml
+    - populate passwords for the query and ingest users from step 3
+
+### 7. Customize dashboards
+./dashboards/adsb/
+  - If using the example map dashboards, copy the 3 .json files to dashboards/adsb/
+  - in the Global and Local files, replace <LATITUDE> and <LONGITUDE> with the latitude and longitude values for your ADS-B receiver
 
 
 ## Configuration
 
 ### Update Inventory
 
-Copy `inventory/eks.yml.template` to `inventory/eks.yml`,
+Copy `./adsb-ansible/inventory/eks.yml.template` to `./adsb-ansible/inventory/eks.yml`,
 and edit eks.yml to match your directory structure:
 
 ```yaml

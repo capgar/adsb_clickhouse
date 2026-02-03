@@ -5,7 +5,7 @@ work in other Kubernetes environments.
 
 
 ### 1. Prepare Certificates
-Review procedures in certs/README.md
+Review procedures in ./docs/KAFKA_CERTS.md
 
 ### 2. Create Kafka Secrets
 Copy manifests/kafka/10-secrets.yaml.example to manifests/kafka/10-secrets.yaml

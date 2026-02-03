@@ -53,8 +53,8 @@ Some of the manifests require configuration for your environment
     - populate passwords for the query and ingest users from step 3
 
 ### 5. Customize dashboards
-./dashboards/templates/
-  - If using the example map dashboards, copy the 3 .json files to dashboards/adsb/
+./dashboards/examples/
+  - If using the example map dashboards, copy the 3 .json files to ../adsb/
   - in the Global and Local files, replace <LATITUDE> and <LONGITUDE> with the latitude and longitude values for your ADS-B receiver
 
 

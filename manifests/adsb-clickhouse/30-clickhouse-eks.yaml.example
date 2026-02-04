@@ -40,7 +40,7 @@ spec:
             <named_collections>
                 <kafka_local>
                     <!-- ClickHouse Kafka engine parameters -->
-                    <kafka_broker_list>lab.url:port</kafka_broker_list>
+                    <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
                     <kafka_topic_list>flights-local</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-local-eks</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
@@ -62,7 +62,7 @@ spec:
                     </kafka>
                 </kafka_local>
                 <kafka_regional>
-                    <kafka_broker_list>lab.url:port</kafka_broker_list>
+                    <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
                     <kafka_topic_list>flights-regional</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-regional-eks</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
@@ -83,7 +83,7 @@ spec:
                     </kafka>
                 </kafka_regional>
                 <kafka_global>
-                    <kafka_broker_list>lab.url:port</kafka_broker_list>
+                    <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
                     <kafka_topic_list>flights-global</kafka_topic_list>
                     <kafka_group_name>clickhouse-lab-global-eks</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>

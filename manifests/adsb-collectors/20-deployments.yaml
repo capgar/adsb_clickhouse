@@ -161,7 +161,7 @@ spec:
               - weight: 100
                 preference:
                   matchExpressions:
-                    - key: adsb-scrapers
+                    - key: adsb-collectors
                       operator: Exists
       
       containers:

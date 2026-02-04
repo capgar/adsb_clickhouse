@@ -8,10 +8,10 @@ manifests/adsb-clickhouse/20-keeper-*.yaml
 !manifests/adsb-clickhouse/20-keeper-eks.yaml
 manifests/adsb-clickhouse/30-clickhouse*.yaml
 manifests/adsb-kafka/10-secrets.yaml
-manifests/adsb-kafka/30-kafka.yaml
+manifests/adsb-kafka/30-kafka*.yaml
 manifests/adsb-monitoring/20-grafana-config.yaml
 manifests/adsb-monitoring/10-grafana-config-eks.yaml
-manifests/adsb-scrapers/10-configmap.yaml
+manifests/adsb-collectors/10-configmap.yaml
 
 # Environment-specific schema files
 schema/users*.sql

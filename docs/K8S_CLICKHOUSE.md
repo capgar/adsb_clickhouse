@@ -42,7 +42,7 @@ Some of the manifests require configuration for your environment
     - populate with the base64-encoded keypair values you created in step 1
   - 30-clickhouse-local.yaml.example
     - copy to 30-clickhouse-local.yaml
-    - replace the 3 instances of "lab.url:port" with the appropriate url:port (or comma-separated list) for your Kafka provider
+    - replace the 3 instances of "lab.url" with the appropriate url (or comma-separated list of url:port) for your Kafka provider
       <kafka_broker_list>lab.url:port</kafka_broker_list>
     - replace <PASSWORD_SHA256> with the SHA256-encoded password for your clickhouse admin account
       (generated with "echo -n mypassword | sha256sum")
@@ -78,7 +78,9 @@ kubectl apply -f manifests/adsb-clickhouse/30-clickhouse-local.yaml
 kubectl get pods -n adsb-clickhouse -w
 
 # 6. Install DB schema and users
-clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema.sql
+clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-local.sql
+clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-regional.sql
+clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-global.sql
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/users.sql
 ```
 
@@ -97,7 +99,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/prometheus-oper
 
 # 4. Deploy Prometheus
 kubectl apply -f manifests/adsb-monitoring/11-prometheus-local.yaml
-kubectl get pods -n adsb-monitoring -w
+kubectl get pods -o wide -n adsb-monitoring -w
 
 # 5. Deploy service monitors
 kubectl apply -f manifests/adsb-monitoring/12-servicemonitor-operator.yaml
@@ -116,7 +118,7 @@ kubectl apply -f manifests/adsb-monitoring/20-grafana-config.yaml
 
 # 8. Deploy Grafana
 kubectl apply -f manifests/adsb-monitoring/25-grafana-local.yaml
-kubectl get pods -n adsb-monitoring -w
+kubectl get pods -o wide -n adsb-monitoring -w
 ```
 
 

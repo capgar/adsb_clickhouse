@@ -43,5 +43,5 @@ For EKS deployments of Clickhouse and monitoring components:
 This requires that you have access to a kafka/redpanda cluster, and TLS keypairs for client authentication (see certs/README.md)
 
 For local k8s/k3s/etc lab deployments, including Kafka and the adsb scraper/producers, review:
-- docs/K8S_KAFKA_SCRAPERS.md
+- docs/K8S_KAFKA_COLLECTORS.md
 - docs/K8S_CLICKHOUSE.md

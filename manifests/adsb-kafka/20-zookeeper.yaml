@@ -1,6 +1,4 @@
 # Zookeeper for Kafka
-# Single-node deployment for k3s-homelab
-
 ---
 apiVersion: v1
 kind: Service
@@ -23,7 +21,7 @@ metadata:
   namespace: adsb-kafka
 spec:
   serviceName: zookeeper
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: zookeeper
@@ -41,6 +39,18 @@ spec:
                 matchExpressions:
                   - key: adsb-kafka-zk
                     operator: Exists
+        podAntiAffinity:
+          # Prefer to spread ZK pods across different nodes
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - zookeeper
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: zookeeper
           image: confluentinc/cp-zookeeper:7.5.0

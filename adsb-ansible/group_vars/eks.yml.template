@@ -31,7 +31,9 @@ kafka_client_key: "{{ certs_dir }}/client.key"
 
 # Schema Files
 schema_files:
-  - "{{ schema_dir }}/schema.sql"
+  - "{{ schema_dir }}/schema-local.sql"
+  - "{{ schema_dir }}/schema-regional.sql"
+  - "{{ schema_dir }}/schema-global.sql"
   - "{{ schema_dir }}/users.sql"
 
 # Monitoring Configuration

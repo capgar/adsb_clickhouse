@@ -8,11 +8,11 @@ work in other Kubernetes environments.
 Review procedures in ./docs/KAFKA_CERTS.md
 
 ### 2. Create Kafka Secrets
-Copy manifests/kafka/10-secrets.yaml.example to manifests/kafka/10-secrets.yaml
+Copy manifests/adsb-kafka/10-secrets.yaml.example to manifests/adsb-kafka/10-secrets.yaml
 and populate with base64-encoded values (from step 1)
 
-### 3. Configure Scrapers
-Copy manifests/scrapers/10-configmap.yaml.example manifests/scrapers/10-configmap.yaml
+### 3. Configure Collectors
+Copy manifests/adsb-collectors/10-configmap.yaml.example manifests/adsb-collectors/10-configmap.yaml
 and edit as appropriate for your location
 
 Key values to update:
@@ -20,22 +20,36 @@ Key values to update:
 - `REGIONAL_URL`: Customize lat/lon/radius for your location
 - `KAFKA_BROKERS`: Should be correct as-is for k3s
 
-### 4. Apply lables to Nodes (optional)
+### 4. Customize manifests
+./manifests/adsb-kafka/30-kafka-single.yaml.example
+or
+./manifests/adsb-kafka/30-kafka-pair.yaml.example
+  - copy to 30-kafka-(single|pair).yaml
+  - replace instances of "lab.url" to the correct url for your kafka cluster
+
+### 5. Apply lables to Nodes (optional)
 We can steer workloads to nodes using a combination of preferred scheduling and taints/tolerations.
 For namespaces with multiple component types (clickhouse and kafka), the workload values define each component:
-- adsb-kafka
+- adsb-kafka (or adsb-kafka-0, adsb-kafka-1 for a pair)
 - adsb-kafka-zk
-- adsb-scrapers
+- adsb-collectors
 
 Example: To steer both Kafka and Zookeeper resources to the same node(s):
 kubectl label nodes <node-name> adsb-kafka=true adsb-kafka-zk=true
 
 Removing a label:
-kubectl label nodes <node-name> adsb-scrapers-
+kubectl label nodes <node-name> adsb-collectors-
 
 Check node labels:
 kubectl get nodes --show-labels
-kubectl get nodes -l adsb-scrapers=true
+kubectl get nodes -l adsb-collectors=true
+
+### 6. Build Scraper Image
+Log on to any kubernetes nodes which are labeled to run adsb-collectors
+mkdir -p ~/adsb-scraper
+cd ~/adsb-scraper
+docker build -t adsb-scraper:latest .
+docker save adsb-scraper:latest | sudo k3s ctr images import -
 
 
 ## Deployment
@@ -53,20 +67,20 @@ kubectl apply -f manifests/adsb-kafka/20-zookeeper.yaml
 kubectl -n adsb-kafka wait --for=condition=ready pod -l app=zookeeper --timeout=300s
 
 # 4. Deploy Kafka and wait for it to be ready
-kubectl apply -f manifests/adsb-kafka/02-kafka.yaml
+kubectl apply -f manifests/adsb-kafka/30-kafka.yaml
 kubectl -n adsb-kafka wait --for=condition=ready pod -l app=kafka --timeout=300s
 ```
 
 ### Deploy Scrapers
 ```bash
 # 1. Create namespace
-kubectl apply -f manifests/adsb-scrapers/00-namespace.yaml
+kubectl apply -f manifests/adsb-collectors/00-namespace.yaml
 
 # 2. Create ConfigMap (your customized file)
-kubectl apply -f manifests/adsb-scrapers/10-configmap.yaml
+kubectl apply -f manifests/adsb-collectors/10-configmap.yaml
 
 # 3. Deploy all scrapers
-kubectl apply -f manifests/adsb-scrapers/20-deployments.yaml
+kubectl apply -f manifests/adsb-collectors/20-deployments.yaml
 ```
 
 ## Verification
@@ -86,23 +100,23 @@ kubectl -n adsb-kafka logs zookeeper-0
 kubectl -n adsb-kafka get svc kafka-external
 ```
 
-### Check Scrapers
+### Check Collectors
 ```bash
 # View all scraper resources
-kubectl -n adsb-scrapers get all
+kubectl -n adsb-collectors get all
 
 # Check which scrapers are running
-kubectl -n adsb-scrapers get pods -l app=adsb-scraper
+kubectl -n adsb-collectors get pods -l app=adsb-scraper
 
 # View logs for specific scraper
-kubectl -n adsb-scrapers logs -l source=local --tail=100
-kubectl -n adsb-scrapers logs -l source=global --tail=100
+kubectl -n adsb-collectors logs -l source=local --tail=100
+kubectl -n adsb-collectors logs -l source=global --tail=100
 
 # Follow logs in real-time
-kubectl -n adsb-scrapers logs -l source=local -f
+kubectl -n adsb-collectors logs -l source=local -f
 
 # Check ConfigMap
-kubectl -n adsb-scrapers get cm scraper-config -o yaml
+kubectl -n adsb-collectors get cm scraper-config -o yaml
 ```
 
 ### Test Kafka Connectivity
@@ -113,7 +127,7 @@ kubectl run -n adsb-kafka kafka-test --rm -it --image=apache/kafka:3.9.0 -- bash
 /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-0.kafka-headless.kafka.svc.cluster.local:9092 --list
 
 # Test external TLS connectivity (requires client certs)
-openssl s_client -connect lab.apgar.us:30192 \
+openssl s_client -connect <kafka_url>:<kafka_port> \
   -cert client.crt -key client.key -CAfile ca.crt
 ```
 
@@ -184,13 +198,13 @@ kubectl -n adsb-kafka logs kafka-0
 kubectl -n adsb-kafka get svc kafka-headless
 
 # Check scraper logs for connection errors
-kubectl -n adsb-scrapers logs -l app=adsb-scraper
+kubectl -n adsb-collectors logs -l app=adsb-scraper
 
 # Verify ConfigMap has correct broker address
-kubectl -n adsb-scrapers get cm scraper-config -o yaml
+kubectl -n adsb-collectors get cm scraper-config -o yaml
 
 # Test connectivity from scraper namespace
-kubectl run -n adsb-scrapers test --rm -it --image=busybox -- sh
+kubectl run -n adsb-collectors test --rm -it --image=busybox -- sh
 # Inside pod:
 nc -zv kafka-0.kafka-headless.kafka.svc.cluster.local 9092
 ```

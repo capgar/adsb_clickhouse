@@ -79,7 +79,7 @@
 
     - name: Informational message
       debug:
-        msg: "Waiting for Keeper cluster to be ready (ignore 'FAILED - RETRYING' messages below - this is normal Ansible behavior)"
+        msg: "Waiting for Keeper cluster to be ready (ignore 'FAILED - RETRYING' messages below)"
 
     - name: Wait for Keeper CHK resource to be ready
       shell: |
@@ -113,7 +113,7 @@
 
     - name: Informational message
       debug:
-        msg: "Waiting for ClickHouse cluster to be ready (ignore 'FAILED - RETRYING' messages below - this is normal Ansible behavior)"
+        msg: "Waiting for ClickHouse cluster to be ready (ignore 'FAILED - RETRYING' messages below)"
 
     - name: Wait for ClickHouse CHI resource to be ready
       shell: |

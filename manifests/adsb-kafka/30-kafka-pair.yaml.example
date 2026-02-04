@@ -1,0 +1,293 @@
+# Kafka 3.9.0 with TLS External Access - Multi-Node Configuration
+# Per-Broker StatefulSets for Node Pinning
+#
+# Each broker is a separate StatefulSet (replicas=1) with its own nodeSelector
+# This allows pinning kafka-0 to node with label adsb-kafka-0=true, etc.
+#
+# Node labeling:
+#   kubectl label node <node-name> adsb-kafka-0=true
+#   kubectl label node <other-node> adsb-kafka-1=true
+#
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: adsb-kafka
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      name: internal
+---
+# External service for kafka-0
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external-0
+  namespace: adsb-kafka
+spec:
+  type: NodePort
+  selector:
+    app: kafka
+    kafka-broker-id: "0"
+  ports:
+    - port: 9094
+      targetPort: 9094
+      nodePort: 30192
+      name: external
+---
+# External service for kafka-1
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external-1
+  namespace: adsb-kafka
+spec:
+  type: NodePort
+  selector:
+    app: kafka
+    kafka-broker-id: "1"
+  ports:
+    - port: 9094
+      targetPort: 9094
+      nodePort: 30193
+      name: external
+---
+# Kafka Broker 0
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-0
+  namespace: adsb-kafka
+spec:
+  serviceName: kafka-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+      kafka-broker-id: "0"
+  template:
+    metadata:
+      labels:
+        app: kafka
+        kafka-broker-id: "0"
+    spec:
+      # Pin kafka-0 to node with label adsb-kafka-0=true
+      nodeSelector:
+        adsb-kafka-0: "true"
+      
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx6G -Xms3G"
+            - name: KAFKA_OPTS
+              value: "-Djavax.net.debug=ssl"
+            - name: BROKER_ID
+              value: "0"
+            - name: EXTERNAL_PORT
+              value: "30192"
+          
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              
+              echo "Starting Kafka broker ${BROKER_ID} with external port ${EXTERNAL_PORT}"
+              
+              # Generate server.properties
+              cat > /tmp/server.properties <<EOF
+              broker.id=${BROKER_ID}
+              zookeeper.connect=zookeeper.adsb-kafka.svc.cluster.local:2181
+              
+              # Listeners
+              listeners=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+              # CUSTOMIZE: Change lab.url to your external hostname/IP
+              advertised.listeners=INTERNAL://kafka-${BROKER_ID}-0.kafka-headless.adsb-kafka.svc.cluster.local:9092,EXTERNAL://lab.url:${EXTERNAL_PORT}
+              listener.security.protocol.map=INTERNAL:PLAINTEXT,EXTERNAL:SSL
+              inter.broker.listener.name=INTERNAL
+              
+              # External listener - TLS + mTLS
+              ssl.keystore.location=/etc/kafka/secrets/server.keystore.jks
+              ssl.keystore.password=changeit
+              ssl.key.password=changeit
+              ssl.truststore.location=/etc/kafka/secrets/server.truststore.jks
+              ssl.truststore.password=changeit
+              ssl.client.auth=required
+              
+              # Storage & Retention
+              log.dirs=/var/lib/kafka/data
+              log.retention.hours=168
+              log.retention.bytes=8589934592
+              log.segment.bytes=134217728
+              log.retention.check.interval.ms=300000
+              log.cleanup.policy=delete
+              
+              # Topic defaults
+              num.partitions=4
+              offsets.topic.replication.factor=2
+              default.replication.factor=2
+              min.insync.replicas=1
+              auto.create.topics.enable=true
+              EOF
+              
+              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+          
+          ports:
+            - containerPort: 9092
+              name: internal
+            - containerPort: 9094
+              name: external
+          
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+            - name: kafka-certs
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+          
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+      
+      volumes:
+        - name: kafka-certs
+          secret:
+            secretName: kafka-certs
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 150Gi
+---
+# Kafka Broker 1
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-1
+  namespace: adsb-kafka
+spec:
+  serviceName: kafka-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+      kafka-broker-id: "1"
+  template:
+    metadata:
+      labels:
+        app: kafka
+        kafka-broker-id: "1"
+    spec:
+      # Pin kafka-1 to node with label adsb-kafka-1=true
+      nodeSelector:
+        adsb-kafka-1: "true"
+      
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx6G -Xms3G"
+            - name: KAFKA_OPTS
+              value: "-Djavax.net.debug=ssl"
+            - name: BROKER_ID
+              value: "1"
+            - name: EXTERNAL_PORT
+              value: "30193"
+          
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              
+              echo "Starting Kafka broker ${BROKER_ID} with external port ${EXTERNAL_PORT}"
+              
+              # Generate server.properties
+              cat > /tmp/server.properties <<EOF
+              broker.id=${BROKER_ID}
+              zookeeper.connect=zookeeper.adsb-kafka.svc.cluster.local:2181
+              
+              # Listeners
+              listeners=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+              # CUSTOMIZE: Change lab.url to your external hostname/IP
+              advertised.listeners=INTERNAL://kafka-${BROKER_ID}-0.kafka-headless.adsb-kafka.svc.cluster.local:9092,EXTERNAL://lab.url:${EXTERNAL_PORT}
+              listener.security.protocol.map=INTERNAL:PLAINTEXT,EXTERNAL:SSL
+              inter.broker.listener.name=INTERNAL
+              
+              # External listener - TLS + mTLS
+              ssl.keystore.location=/etc/kafka/secrets/server.keystore.jks
+              ssl.keystore.password=changeit
+              ssl.key.password=changeit
+              ssl.truststore.location=/etc/kafka/secrets/server.truststore.jks
+              ssl.truststore.password=changeit
+              ssl.client.auth=required
+              
+              # Storage & Retention
+              log.dirs=/var/lib/kafka/data
+              log.retention.hours=168
+              log.retention.bytes=8589934592
+              log.segment.bytes=134217728
+              log.retention.check.interval.ms=300000
+              log.cleanup.policy=delete
+              
+              # Topic defaults
+              num.partitions=4
+              offsets.topic.replication.factor=2
+              default.replication.factor=2
+              min.insync.replicas=1
+              auto.create.topics.enable=true
+              EOF
+              
+              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+          
+          ports:
+            - containerPort: 9092
+              name: internal
+            - containerPort: 9094
+              name: external
+          
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+            - name: kafka-certs
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+          
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+      
+      volumes:
+        - name: kafka-certs
+          secret:
+            secretName: kafka-certs
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 150Gi

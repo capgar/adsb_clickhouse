@@ -1,0 +1,31 @@
+# Collector Configuration
+# Shared settings for ADS-B Scrapers
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: adsb-collectors
+  labels:
+    app.kubernetes.io/name: adsb-collectors
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scraper-config
+  namespace: adsb-collectors
+data:
+  # Kafka broker address (shared by all scrapers)
+  KAFKA_BROKERS: "kafka-0-0.kafka-headless.adsb-kafka.svc.cluster.local:9092,kafka-1-0.kafka-headless.adsb-kafka.svc.cluster.local:9092"
+
+---
+# Example of how to override per-scraper if needed
+# You can create additional ConfigMaps or use env directly in deployments
+#
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: scraper-local-config
+#   namespace: adsb-collectors
+# data:
+#   POLL_INTERVAL: "2"
+#   SOURCE_URL: "http://192.168.1.100:8088/data/aircraft.json"

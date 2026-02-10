@@ -1,0 +1,78 @@
+# Kafka Topic Definitions ConfigMap
+#
+# Define all Kafka topics with individual configurations here.
+# Modify this file to add topics or change settings, then reapply.
+#
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-topic-config
+  namespace: adsb-kafka
+data:
+  # Topic definitions in JSON format
+  # Max retention is >= sum of (bytes/partition) * (partitions) across all partitions
+  # retention cheatsheet:
+  #  GB   Bytes         
+  #  1 = 1073741824
+  #  2 = 2147483648
+  #  4 = 4294967296
+  #  8 = 8589934592
+  # 16 = 17179869184
+  # 32 = 34359738368
+  # 64 = 68719476736
+  #
+  # 1 hour  = 3600000 ms
+  # 1 day   = 86400000 ms
+  # 1 week  = 604800000 ms
+  # 1 month = 2628000000 ms
+  # 1 year = 31557600000 ms
+  topics.json: |
+    {
+      "defaults": {
+        "replication_factor": 2,
+        "retention_bytes": 8589934592,
+        "retention_ms": 604800000,
+        "compression_type": "lz4",
+        "min_insync_replicas": 1
+      },
+      "topics": [
+        {
+          "name": "positions-local",
+          "partitions": 1,
+          "description": "Local ADS-B receiver data - low volume",
+          "retention_bytes": 17179869184,
+          "retention_ms": 31557600000
+        },
+        {
+          "name": "positions-regional",
+          "partitions": 2,
+          "description": "Regional aggregated flight data - medium volume",
+          "retention_bytes": 4294967296,
+          "retention_ms": 2628000000
+        },
+        {
+          "name": "positions-global-stream",
+          "partitions": 4,
+          "description": "Global flight feed - high volume",
+          "retention_bytes": 2147483648,
+          "retention_ms": 604800000,
+          "compression_type": "snappy"
+        },
+        {
+          "name": "positions-global-opensky",
+          "partitions": 2,
+          "description": "Global flight feed - medium volume",
+          "retention_bytes": 4294967296,
+          "retention_ms": 604800000,
+          "compression_type": "snappy"
+        },
+        {
+          "name": "aircraft-metadata",
+          "partitions": 1,
+          "description": "Aircraft registration and metadata - low volume",
+          "retention_bytes": 8589934592,
+          "retention_ms": 31557600000
+        }
+      ]
+    }

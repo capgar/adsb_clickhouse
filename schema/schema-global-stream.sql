@@ -1,7 +1,7 @@
 -- ============================================================================
 -- ADS-B ClickHouse Schema V4.0
--- For Regional ADS-B API Data
--- 
+-- For Global ADS-B API Data (streamed from adsb.lol)
+--
 -- Architecture for 2 shards × 2 replicas:
 --   1. Kafka tables (consume on each pod independently)
 --   2. Local ReplicatedMergeTree tables (data stored with replication)
@@ -23,16 +23,11 @@ USE adsb;
 -- Each pod consumes independently - no sharding needed
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
+CREATE TABLE IF NOT EXISTS positions_global_stream_kafka ON CLUSTER `adsb-data` (
     -- Core identification
     hex Nullable(String),
     type Nullable(String),
     flight Nullable(String),
-    r Nullable(String),
-    t Nullable(String),
-    desc Nullable(String),
-    ownOp Nullable(String),
-    year Nullable(String),
     -- Position data
     lat Nullable(Float64),
     lon Nullable(Float64),
@@ -40,17 +35,20 @@ CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
     alt_geom Nullable(Int32),
     gs Nullable(Float32),
     track Nullable(Float32),
+    track_rate Nullable(Float32),
+    roll Nullable(Float32),
     mag_heading Nullable(Float32),
     true_heading Nullable(Float32),
-    nav_heading Nullable(Float32),
     baro_rate Nullable(Int32),
     geom_rate Nullable(Int32),
-    -- Relative position (note: dst/dir, not r_dst/r_dir like local)
-    dst Nullable(Float32),
-    dir Nullable(Float32),
     -- Weather & Advanced Performance
     ias Nullable(Int32),
+    tas Nullable(Int32),
     mach Nullable(Float32),
+    oat Nullable(Int32),
+    tat Nullable(Int32),
+    ws Nullable(Int32),
+    wd Nullable(Int32),
     -- Status
     squawk Nullable(String),
     emergency Nullable(String),
@@ -61,6 +59,7 @@ CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
     nav_qnh Nullable(Float32),
     nav_altitude_mcp Nullable(Int32),
     nav_altitude_fms Nullable(Int32),
+    nav_heading Nullable(Float32),
     nav_modes Array(String),
     -- Quality indicators
     version Nullable(Int32),
@@ -73,7 +72,6 @@ CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
     sil_type Nullable(String),
     gva Nullable(Int32),
     sda Nullable(Int32),
-    dbFlags Nullable(Int32),
     -- Signal & Physical (Receiver)
     rssi Nullable(Float32),
     messages Nullable(Int32),
@@ -82,10 +80,15 @@ CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
     -- State Persistence & Diagnosis (Receiver)
     seen_pos Nullable(Float32),
     seen Nullable(Float32),
+    lastPosition Nullable(String),
+    calc_track Nullable(Int32),
+    gpsOkLat Nullable(Float64),
+    gpsOkLon Nullable(Float64),
+    gpsOkBefore Nullable(Float64),
     -- Metadata
     source LowCardinality(String),
     scrape_time DateTime
-) ENGINE = Kafka(kafka_regional);
+) ENGINE = Kafka(kafka_global_stream);
 
 
 -- ============================================================================
@@ -93,16 +96,11 @@ CREATE TABLE IF NOT EXISTS positions_regional_kafka ON CLUSTER `adsb-data` (
 -- Data is sharded by icao24 hash across both shards
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS positions_regional ON CLUSTER `adsb-data` (
+CREATE TABLE IF NOT EXISTS positions_global_stream ON CLUSTER `adsb-data` (
     -- Core identification
     icao24 String,
     type LowCardinality(String),
     callsign String,
-    registration String,
-    aircraft_type LowCardinality(String),
-    description String,
-    owner_operator String,
-    year String,
     -- Position data
     lat Float64,
     lon Float64,
@@ -110,16 +108,20 @@ CREATE TABLE IF NOT EXISTS positions_regional ON CLUSTER `adsb-data` (
     alt_geom Int32,
     ground_speed Float32,
     track Float32,
+    track_rate Float32,
+    roll Float32,
     mag_heading Float32,
     true_heading Float32,
     vertical_rate Int32,
     geom_rate Int32,
-    -- Relative position
-    distance Float32,
-    direction Float32,
     -- Weather & Advanced Performance
     ias Int32,
+    tas Int32,
     mach Float32,
+    oat Int32,
+    tat Int32,
+    wind_speed Int32,
+    wind_direction Int32,
     -- Status
     squawk LowCardinality(String),
     emergency LowCardinality(String),
@@ -143,28 +145,32 @@ CREATE TABLE IF NOT EXISTS positions_regional ON CLUSTER `adsb-data` (
     sil_type LowCardinality(String),
     gva Int32,
     sda Int32,
-    db_flags Int32,
     -- Signal & Physical (Receiver)
     rssi Float32,
     messages Int32,
     mlat Array(LowCardinality(String)),
     tisb Array(LowCardinality(String)),
-    -- Timing
+    -- State Persistence & Diagnosis (Receiver)
     seen_pos Float32,
     seen Float32,
+    last_position String,
+    calc_track Int32,
+    gps_ok_lat Float64,
+    gps_ok_lon Float64,
+    gps_ok_before Float64,
     -- Metadata
     source LowCardinality(String),
     scrape_time DateTime,
     ingestion_time DateTime
-) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/positions_regional', '{replica}')
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/positions_global_stream', '{replica}')
 PARTITION BY toYYYYMMDD(scrape_time)
 ORDER BY (icao24, scrape_time)
-TTL scrape_time + INTERVAL 90 DAY
+TTL scrape_time + INTERVAL 30 DAY
 SETTINGS ttl_only_drop_parts = 1;
 
-CREATE TABLE IF NOT EXISTS positions_regional_dist ON CLUSTER `adsb-data`
-AS positions_regional
-ENGINE = Distributed('adsb-data', adsb, positions_regional, rand());
+CREATE TABLE IF NOT EXISTS positions_global_stream_dist ON CLUSTER `adsb-data`
+AS positions_global_stream
+ENGINE = Distributed('adsb-data', adsb, positions_global_stream, rand());
 
 
 -- ============================================================================
@@ -172,17 +178,12 @@ ENGINE = Distributed('adsb-data', adsb, positions_regional, rand());
 -- These write to LOCAL tables, distributed table aggregates across shards
 -- ============================================================================
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS positions_regional_kafka_mv ON CLUSTER `adsb-data` TO positions_regional AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS positions_global_stream_kafka_mv ON CLUSTER `adsb-data` TO positions_global_stream AS
 SELECT
     -- Core identification
     trimBoth(lower(ifNull(hex, ''))) AS icao24,
     ifNull(type, '') AS type,
     trimBoth(lower(ifNull(flight, ''))) AS callsign,
-    ifNull(r, '') AS registration,
-    ifNull(t, '') AS aircraft_type,
-    ifNull(desc, '') AS description,
-    ifNull(ownOp, '') AS owner_operator,
-    ifNull(year, '') AS year,
     -- Position data
     lat,
     lon,
@@ -194,16 +195,20 @@ SELECT
     toInt32(ifNull(alt_geom, toInt32(-9999))) AS alt_geom,
     toFloat32(ifNull(gs, toFloat32(-9999))) AS ground_speed,
     toFloat32(ifNull(track, toFloat32(-9999))) AS track,
+    toFloat32(ifNull(track_rate, toFloat32(-9999))) AS track_rate,
+    toFloat32(ifNull(roll, toFloat32(-9999))) AS roll,
     toFloat32(ifNull(mag_heading, toFloat32(-9999))) AS mag_heading,
     toFloat32(ifNull(true_heading, toFloat32(-9999))) AS true_heading,
     toInt32(ifNull(baro_rate, toInt32(-9999))) AS vertical_rate,
     toInt32(ifNull(geom_rate, toInt32(-9999))) AS geom_rate,
-    -- Relative position
-    toFloat32(ifNull(dst, toFloat32(-9999))) AS distance,
-    toFloat32(ifNull(dir, toFloat32(-9999))) AS direction,
     -- Weather & Advanced Performance
     toInt32(ifNull(ias, toInt32(-9999))) AS ias,
+    toInt32(ifNull(tas, toInt32(-9999))) AS tas,
     toFloat32(ifNull(mach, toFloat32(-9999))) AS mach,
+    toInt32(ifNull(oat, toInt32(-9999))) AS oat,
+    toInt32(ifNull(tat, toInt32(-9999))) AS tat,
+    toInt32(ifNull(ws, toInt32(-9999))) AS wind_speed,
+    toInt32(ifNull(wd, toInt32(-9999))) AS wind_direction,
     -- Status
     ifNull(squawk, '') AS squawk,
     ifNull(emergency, '') AS emergency,
@@ -230,7 +235,6 @@ SELECT
     ifNull(sil_type, '') AS sil_type,
     toInt32(ifNull(gva, toInt32(-9999))) AS gva,
     toInt32(ifNull(sda, toInt32(-9999))) AS sda,
-    toInt32(ifNull(dbFlags, toInt32(-9999))) AS db_flags,
     -- Signal & Physical (Receiver)
     toFloat32(ifNull(rssi, toFloat32(-9999))) AS rssi,
     toInt32(ifNull(messages, toInt32(-9999))) AS messages,
@@ -242,14 +246,19 @@ SELECT
         x -> x != '', 
         arrayMap(x -> trimBoth(lower(x)), tisb)
     ) AS tisb,
-    -- Timing
+    -- State Persistence & Diagnosis (Receiver)
     toFloat32(ifNull(seen_pos, toFloat32(0.0))) AS seen_pos,
     toFloat32(ifNull(seen, toFloat32(0.0))) AS seen,
+    ifNull(lastPosition, '') AS last_position,
+    toInt32(ifNull(calc_track, toInt32(-9999))) AS calc_track,
+    toFloat64(ifNull(gpsOkLat, toFloat64(-9999))) AS gps_ok_lat,
+    toFloat64(ifNull(gpsOkLon, toFloat64(-9999))) AS gps_ok_lon,
+    toFloat64(ifNull(gpsOkBefore, toFloat64(-9999))) AS gps_ok_before,
     -- Metadata
     source,
     scrape_time,
     now() AS ingestion_time
-FROM positions_regional_kafka
+FROM positions_global_stream_kafka
 WHERE isNotNull(hex)
 AND isNotNull(lat)
 AND isNotNull(lon)
@@ -258,19 +267,14 @@ AND lon BETWEEN -180 AND 180;
 
 
 -- ============================================================================
--- REPLACING TABLES (Deduplicated current state per shard)
+-- REPLACING TABLE (Deduplicated current state)
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS positions_regional_replacing ON CLUSTER `adsb-data` (
+CREATE TABLE IF NOT EXISTS positions_global_stream_replacing ON CLUSTER `adsb-data` (
     -- Core identification
     icao24 String,
     type LowCardinality(String),
     callsign String,
-    registration String,
-    aircraft_type LowCardinality(String),
-    description String,
-    owner_operator String,
-    year String,
     -- Position data
     lat Float64,
     lon Float64,
@@ -278,16 +282,20 @@ CREATE TABLE IF NOT EXISTS positions_regional_replacing ON CLUSTER `adsb-data` (
     alt_geom Int32,
     ground_speed Float32,
     track Float32,
+    track_rate Float32,
+    roll Float32,
     mag_heading Float32,
     true_heading Float32,
     vertical_rate Int32,
     geom_rate Int32,
-    -- Relative position
-    distance Float32,
-    direction Float32,
     -- Weather & Advanced Performance
     ias Int32,
+    tas Int32,
     mach Float32,
+    oat Int32,
+    tat Int32,
+    wind_speed Int32,
+    wind_direction Int32,
     -- Status
     squawk LowCardinality(String),
     emergency LowCardinality(String),
@@ -311,7 +319,6 @@ CREATE TABLE IF NOT EXISTS positions_regional_replacing ON CLUSTER `adsb-data` (
     sil_type LowCardinality(String),
     gva Int32,
     sda Int32,
-    db_flags Int32,
     -- Signal & Physical (Receiver)
     rssi Float32,
     messages Int32,
@@ -324,44 +331,44 @@ CREATE TABLE IF NOT EXISTS positions_regional_replacing ON CLUSTER `adsb-data` (
     source LowCardinality(String),
     scrape_time DateTime,
     ingestion_time DateTime
-) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/positions_regional_replacing', '{replica}', scrape_time)
+) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/positions_global_stream_replacing', '{replica}', scrape_time)
 ORDER BY icao24
 TTL scrape_time + INTERVAL 1 HOUR;
 
 
-CREATE TABLE IF NOT EXISTS positions_regional_replacing_dist ON CLUSTER `adsb-data`
-AS positions_regional_replacing
-ENGINE = Distributed('adsb-data', adsb, positions_regional_replacing, rand());
+CREATE TABLE IF NOT EXISTS positions_global_stream_replacing_dist ON CLUSTER `adsb-data`
+AS positions_global_stream_replacing
+ENGINE = Distributed('adsb-data', adsb, positions_global_stream_replacing, rand());
 
 
 -- ============================================================================
 -- MATERIALIZED VIEWS: Long-term Storage → Replacing Tables
 -- ============================================================================
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS positions_regional_replacing_mv ON CLUSTER `adsb-data` TO positions_regional_replacing AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS positions_global_stream_replacing_mv ON CLUSTER `adsb-data` TO positions_global_stream_replacing AS
 SELECT
     icao24,
     type,
     callsign,
-    registration,
-    aircraft_type,
-    description,
-    owner_operator,
-    year,
     lat,
     lon,
     alt_baro,
     alt_geom,
     ground_speed,
     track,
+    track_rate,
+    roll,
     mag_heading,
     true_heading,
     vertical_rate,
     geom_rate,
-    distance,
-    direction,
     ias,
+    tas,
     mach,
+    oat,
+    tat,
+    wind_speed,
+    wind_direction,
     squawk,
     emergency,
     category,
@@ -382,7 +389,6 @@ SELECT
     sil_type,
     gva,
     sda,
-    db_flags,
     rssi,
     messages,
     mlat,
@@ -392,7 +398,7 @@ SELECT
     source,
     scrape_time,
     ingestion_time
-FROM positions_regional
+FROM positions_global_stream
 WHERE scrape_time > now() - INTERVAL 2 HOUR;
 
 
@@ -401,10 +407,10 @@ WHERE scrape_time > now() - INTERVAL 2 HOUR;
 -- Query from distributed replacing tables for complete view
 -- ============================================================================
 
--- Regional latest batch (all aircraft from most recent scrape, all shards)
-CREATE VIEW IF NOT EXISTS positions_regional_latest ON CLUSTER `adsb-data` AS
+-- Global latest batch (all aircraft from most recent scrape, all shards)
+CREATE VIEW IF NOT EXISTS positions_global_stream_latest ON CLUSTER `adsb-data` AS
 SELECT *
-FROM positions_regional_replacing_dist FINAL
-WHERE scrape_time > now() - INTERVAL 1 MINUTE
+FROM positions_global_stream_replacing_dist FINAL
+WHERE scrape_time > now() - INTERVAL 5 MINUTE
 ORDER BY icao24, scrape_time DESC
 LIMIT 1 BY icao24;

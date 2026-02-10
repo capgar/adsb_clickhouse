@@ -1,0 +1,274 @@
+# Updated ADS-B Scraper Deployments
+# 
+# Each scraper instance accepts one source URL and publishes to one Kafka topic
+# This allows flexible deployment patterns:
+# - Multiple regional scrapers publishing to same topic
+# - Single global scraper publishing to dedicated topic
+# - Enabling or disabling scrapers (setting replica to 0 or 1)
+
+---
+# Local receiver scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adsb-scraper-local-receiver
+  namespace: adsb-collectors
+  labels:
+    app: adsb-scraper
+    source: local
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adsb-scraper
+      source: local
+  template:
+    metadata:
+      labels:
+        app: adsb-scraper
+        source: local
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: adsb-collectors
+                    operator: Exists
+      
+      containers:
+        - name: scraper
+          image: adsb-scraper:latest
+          imagePullPolicy: IfNotPresent
+          
+          env:
+            - name: SOURCE_TYPE
+              value: "local"
+            - name: SOURCE_NAME
+              value: "local"
+            - name: SOURCE_URL
+              value: "http://10.0.0.3:8088/data/aircraft.json"
+            - name: KAFKA_TOPIC
+              value: "positions-local"
+            - name: POLL_INTERVAL
+              value: "2"
+            - name: STARTUP_SETTLE_TIME
+              value: "5"
+            - name: POST_KAFKA_SETTLE_TIME
+              value: "5"
+            - name: MAX_CONSECUTIVE_ERRORS
+              value: "50"
+          
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
+---
+# Regional scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adsb-scraper-regional-airlive
+  namespace: adsb-collectors
+  labels:
+    app: adsb-scraper
+    source: regional
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adsb-scraper
+      source: regional
+  template:
+    metadata:
+      labels:
+        app: adsb-scraper
+        source: regional
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: adsb-collectors
+                    operator: Exists
+      
+      containers:
+        - name: scraper
+          image: adsb-scraper:latest
+          imagePullPolicy: IfNotPresent
+          
+          env:
+            - name: SOURCE_TYPE
+              value: "regional"
+            - name: SOURCE_NAME
+              value: "airplanes.live"
+            - name: SOURCE_URL
+              value: "https://api.airplanes.live/v2/point/<LAT>/<LON>/185"
+            - name: KAFKA_TOPIC
+              value: "positions-regional"
+            - name: POLL_INTERVAL
+              value: "7"
+            - name: STARTUP_SETTLE_TIME
+              value: "10"
+            - name: POST_KAFKA_SETTLE_TIME
+              value: "10"
+            - name: MAX_CONSECUTIVE_ERRORS
+              value: "10"
+          
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
+---
+# Global stream scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adsb-scraper-global-adsblol
+  namespace: adsb-collectors
+  labels:
+    app: adsb-scraper
+    source: global-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adsb-scraper
+      source: global-stream
+  template:
+    metadata:
+      labels:
+        app: adsb-scraper
+        source: global-stream
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: adsb-collectors
+                    operator: Exists
+      
+      containers:
+        - name: scraper
+          image: adsb-scraper:latest
+          imagePullPolicy: IfNotPresent
+          
+          env:
+            - name: SOURCE_TYPE
+              value: "global-stream"
+            - name: SOURCE_NAME
+              value: "adsb.lol"
+            - name: SOURCE_URL
+              value: "http://readsb-stream.adsb-collectors.svc.cluster.local:8080/data/aircraft.json"
+            - name: KAFKA_TOPIC
+              value: "positions-global-stream"
+            - name: POLL_INTERVAL
+              value: "5"
+            - name: STARTUP_SETTLE_TIME
+              value: "10"
+            - name: POST_KAFKA_SETTLE_TIME
+              value: "10"
+            - name: MAX_CONSECUTIVE_ERRORS
+              value: "10"
+          
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+---
+# Global OpenSky scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adsb-scraper-global-opensky
+  namespace: adsb-collectors
+  labels:
+    app: adsb-scraper
+    source: global-opensky
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adsb-scraper
+      source: global-opensky
+  template:
+    metadata:
+      labels:
+        app: adsb-scraper
+        source: global-opensky
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: adsb-collectors
+                    operator: Exists
+      
+      containers:
+        - name: scraper
+          image: adsb-scraper:latest
+          imagePullPolicy: IfNotPresent
+          
+          env:
+            - name: SOURCE_TYPE
+              value: "global-opensky"
+            - name: SOURCE_NAME
+              value: "opensky-network.org"
+            - name: SOURCE_URL
+              value: "https://opensky-network.org/api/states/all"
+            - name: KAFKA_TOPIC
+              value: "positions-global-opensky"
+            - name: POLL_INTERVAL
+              value: "45"
+            - name: STARTUP_SETTLE_TIME
+              value: "10"
+            - name: POST_KAFKA_SETTLE_TIME
+              value: "10"
+            - name: MAX_CONSECUTIVE_ERRORS
+              value: "10"
+            - name: OPENSKY_CLIENT_ID
+              value: "capgar-api-client"
+            - name: OPENSKY_CLIENT_SECRET
+              value: "zC6z7iE5jlGg3pGh2eHFIgZpCM1ZbEWF"
+          
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

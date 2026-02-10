@@ -1,0 +1,121 @@
+# ClickHouse Keeper
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adsb-keeper-headless
+  namespace: adsb-clickhouse
+  labels:
+    app: clickhouse-keeper
+    clickhouse-keeper.altinity.com/chk: adsb-keeper
+spec:
+  clusterIP: None
+  selector:
+    clickhouse-keeper.altinity.com/chk: adsb-keeper
+  ports:
+    - name: client
+      port: 2181
+      targetPort: 2181
+    - name: raft
+      port: 9444
+      targetPort: 9444
+    - name: prometheus
+      port: 9234
+      targetPort: 9234
+---
+apiVersion: clickhouse-keeper.altinity.com/v1
+kind: ClickHouseKeeperInstallation
+metadata:
+  name: adsb-keeper
+  namespace: adsb-clickhouse
+spec:
+  configuration:
+    clusters:
+      - name: adsb-keeper
+        layout:
+          replicasCount: 3
+    
+    settings:
+      logger/level: information
+      logger/console: "true"
+      listen_host: "0.0.0.0"
+      keeper_server/storage_path: /var/lib/clickhouse-keeper
+      keeper_server/log_storage_path: /var/lib/clickhouse-keeper/logs
+      keeper_server/snapshot_storage_path: /var/lib/clickhouse-keeper/snapshots
+      keeper_server/coordination_settings/operation_timeout_ms: "10000"
+      keeper_server/coordination_settings/session_timeout_ms: "30000"
+      keeper_server/coordination_settings/raft_logs_level: information
+      keeper_server/raft_configuration/tcp_port: "9444"
+      prometheus/endpoint: /metrics
+      prometheus/port: "9234"
+      prometheus/metrics: "true"
+      prometheus/asynchronous_metrics: "true"
+  
+  defaults:
+    templates:
+      podTemplate: keeper-pod
+      dataVolumeClaimTemplate: keeper-data
+  
+  templates:
+    podTemplates:
+      - name: keeper-pod
+        spec:
+          affinity:
+            nodeAffinity:
+              # Prefer designated nodes
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: adsb-clickhouse-keeper
+                        operator: Exists
+            podAntiAffinity:
+              # Spread Keeper pods across different nodes for HA
+              # optional to allow for single instance labs
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: clickhouse-keeper.altinity.com/chk
+                          operator: In
+                          values:
+                            - adsb-keeper
+                    topologyKey: kubernetes.io/hostname
+          containers:
+            - name: clickhouse-keeper
+              image: altinity/clickhouse-keeper:25.3.8.10041.altinitystable
+              ports:
+                - name: keeper
+                  containerPort: 2181
+                - name: raft
+                  containerPort: 9444
+                - name: prometheus
+                  containerPort: 9234
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+              livenessProbe:
+                tcpSocket:
+                  port: 2181
+                initialDelaySeconds: 30
+                periodSeconds: 10
+              readinessProbe:
+                tcpSocket:
+                  port: 2181
+                initialDelaySeconds: 10
+                periodSeconds: 5
+    
+    volumeClaimTemplates:
+      - name: keeper-data
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 10Gi

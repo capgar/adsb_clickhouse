@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 2,
+  "id": 3,
   "links": [],
   "panels": [
     {
@@ -116,101 +116,6 @@
         "layers": [
           {
             "config": {
-              "showLegend": false,
-              "style": {
-                "color": {
-                  "fixed": "dark-red"
-                },
-                "opacity": 1,
-                "rotation": {
-                  "fixed": 0,
-                  "max": 360,
-                  "min": -360,
-                  "mode": "mod"
-                },
-                "size": {
-                  "fixed": 7,
-                  "max": 15,
-                  "min": 2
-                },
-                "symbol": {
-                  "fixed": "img/icons/marker/triangle.svg",
-                  "mode": "fixed"
-                },
-                "symbolAlign": {
-                  "horizontal": "center",
-                  "vertical": "center"
-                },
-                "textConfig": {
-                  "fontSize": 12,
-                  "offsetX": 0,
-                  "offsetY": 0,
-                  "textAlign": "center",
-                  "textBaseline": "middle"
-                }
-              }
-            },
-            "filterData": {
-              "id": "byRefId",
-              "options": "Local Receiver"
-            },
-            "location": {
-              "mode": "auto"
-            },
-            "name": "Receiver",
-            "tooltip": true,
-            "type": "markers"
-          },
-          {
-            "config": {
-              "showLegend": false,
-              "style": {
-                "color": {
-                  "field": "alt_baro",
-                  "fixed": "dark-green"
-                },
-                "opacity": 0.5,
-                "rotation": {
-                  "fixed": 0,
-                  "max": 360,
-                  "min": -360,
-                  "mode": "mod"
-                },
-                "size": {
-                  "fixed": 2,
-                  "max": 15,
-                  "min": 2
-                },
-                "symbol": {
-                  "fixed": "img/icons/marker/circle.svg",
-                  "mode": "fixed"
-                },
-                "symbolAlign": {
-                  "horizontal": "center",
-                  "vertical": "center"
-                },
-                "textConfig": {
-                  "fontSize": 12,
-                  "offsetX": 0,
-                  "offsetY": 0,
-                  "textAlign": "center",
-                  "textBaseline": "middle"
-                }
-              }
-            },
-            "filterData": {
-              "id": "byRefId",
-              "options": "pos_recent"
-            },
-            "location": {
-              "mode": "auto"
-            },
-            "name": "past_positions",
-            "tooltip": true,
-            "type": "markers"
-          },
-          {
-            "config": {
               "showLegend": true,
               "style": {
                 "color": {
@@ -249,12 +154,12 @@
             },
             "filterData": {
               "id": "byRefId",
-              "options": "pos_current"
+              "options": "Positions"
             },
             "location": {
               "mode": "auto"
             },
-            "name": "current_positions",
+            "name": "Aircraft",
             "tooltip": true,
             "type": "markers"
           }
@@ -266,12 +171,12 @@
           "allLayers": false,
           "id": "coords",
           "lastOnly": false,
-          "lat": <LATITUDE>,
+          "lat": 39.23444,
           "layer": "Receiver",
-          "lon": <LONGITUDE>,
+          "lon": -77.34185,
           "noRepeat": true,
           "shared": true,
-          "zoom": 8
+          "zoom": 4
         }
       },
       "pluginVersion": "12.3.1",
@@ -295,54 +200,8 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed,\r\n    registration,\r\n    aircraft_type,\r\n    description\r\nFROM adsb.positions_regional_latest\r\nWHERE ground_speed>0\r\nORDER BY alt_baro ASC",
-          "refId": "pos_current"
-        },
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "adsb"
-          },
-          "editorType": "sql",
-          "format": 1,
-          "hide": false,
-          "meta": {
-            "builderOptions": {
-              "columns": [],
-              "database": "",
-              "limit": 1000,
-              "mode": "list",
-              "queryType": "table",
-              "table": ""
-            }
-          },
-          "pluginVersion": "4.12.0",
-          "queryType": "table",
-          "rawSql": "SELECT *\r\nFROM (\r\n    SELECT\r\n        scrape_time as time,\r\n        icao24,\r\n        lat,\r\n        lon,\r\n        alt_baro,\r\n        -- Generate a unique row number for the entire result set\r\n        rowNumberInAllBlocks() AS row_idx\r\n    FROM adsb.positions_regional_dist\r\n    WHERE $__timeFilter(time)\r\n    AND ground_speed > 0\r\n    ORDER BY time ASC\r\n    )\r\n-- Keep every nth point to reduce plotting overhead\r\nWHERE row_idx % 4 = 0",
-          "refId": "pos_recent"
-        },
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "adsb"
-          },
-          "editorType": "sql",
-          "format": 1,
-          "hide": false,
-          "meta": {
-            "builderOptions": {
-              "columns": [],
-              "database": "",
-              "limit": 1000,
-              "mode": "list",
-              "queryType": "table",
-              "table": ""
-            }
-          },
-          "pluginVersion": "4.12.0",
-          "queryType": "table",
-          "rawSql": "SELECT \r\n    now() as t,\r\n    <LATITUDE> AS lat,\r\n    <LONGITUDE> AS lon,\r\n    'Receiver' AS label",
-          "refId": "Local Receiver"
+          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed\r\nFROM adsb.positions_global_stream_latest\r\nWHERE ground_speed > 0\r\nORDER BY alt_baro ASC",
+          "refId": "Positions"
         }
       ],
       "title": "Aircraft Positions",
@@ -362,7 +221,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Current Positions: Regional",
-  "uid": "klj3-9s",
-  "version": 29
+  "title": "Current Positions: Global (Stream)",
+  "uid": "as34as",
+  "version": 14
 }

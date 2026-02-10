@@ -1,0 +1,138 @@
+---
+# Readsb client for ADSB.lol Beast feed
+# Requires: You must be feeding to ADSB.lol to access their Beast output
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: readsb-stream-config
+  namespace: adsb-collectors
+data:
+  TZ: "UTC"
+  LOGLEVEL: "info"
+  
+  # Readsb networking
+  READSB_NET_ENABLE: "true"
+  READSB_NET_ONLY: "true"
+  
+  # JSON output
+  READSB_JSON_INTERVAL: "1"
+  READSB_JSON_TRACE_INTERVAL: "15"
+  
+  # Stats
+  READSB_STATS_EVERY: "3600"
+  
+  # No location needed for consuming only
+  READSB_LAT: ""
+  READSB_LON: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readsb-stream-client
+  namespace: adsb-collectors
+  labels:
+    app: readsb-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: readsb-stream
+  template:
+    metadata:
+      labels:
+        app: readsb-stream
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: adsb-collectors
+                operator: Exists
+      
+      containers:
+      - name: readsb
+        image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest
+        envFrom:
+        - configMapRef:
+            name: readsb-stream-config
+        env:
+        # Connect to ADSB.lol feeder-only output ports
+        # Port 1365 = ADS-B Beast format
+        # Port 1366 = MLAT results in SBS format
+        - name: ULTRAFEEDER_CONFIG
+          value: "adsb,out.adsb.lol,1365,beast_in;adsb,out.adsb.lol,1366,sbs_in_mlat"
+        - name: READSB_NET_JSON_PORT_INTERVAL
+          value: "1.0"
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 30005
+          name: beast-out
+          protocol: TCP
+        volumeMounts:
+        - name: globe-history
+          mountPath: /var/globe_history
+        - name: graphs-data
+          mountPath: /var/lib/collectd
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 12
+      
+      volumes:
+      - name: globe-history
+        emptyDir: {}
+      - name: graphs-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: readsb-stream
+  namespace: adsb-collectors
+spec:
+  selector:
+    app: readsb-stream
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 80
+    protocol: TCP
+    nodePort: 30080  # Access tar1090 at http://<node-ip>:30080
+  - name: beast
+    port: 30005
+    targetPort: 30005
+    protocol: TCP
+    nodePort: 30005
+  type: NodePort

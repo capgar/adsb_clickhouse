@@ -41,8 +41,8 @@ spec:
                 <kafka_local>
                     <!-- ClickHouse Kafka engine parameters -->
                     <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
-                    <kafka_topic_list>flights-local</kafka_topic_list>
-                    <kafka_group_name>clickhouse-lab-local-eks</kafka_group_name>
+                    <kafka_topic_list>positions-local</kafka_topic_list>
+                    <kafka_group_name>clickhouse-eks-local</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
                     <kafka_skip_broken_messages>1</kafka_skip_broken_messages>
                     <kafka_poll_timeout_ms>100</kafka_poll_timeout_ms>
@@ -63,14 +63,14 @@ spec:
                 </kafka_local>
                 <kafka_regional>
                     <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
-                    <kafka_topic_list>flights-regional</kafka_topic_list>
-                    <kafka_group_name>clickhouse-lab-regional-eks</kafka_group_name>
+                    <kafka_topic_list>positions-regional</kafka_topic_list>
+                    <kafka_group_name>clickhouse-eks-regional</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
                     <kafka_skip_broken_messages>10</kafka_skip_broken_messages>
                     <kafka_poll_timeout_ms>100</kafka_poll_timeout_ms>
                     <kafka_flush_interval_ms>5000</kafka_flush_interval_ms>
                     <kafka_max_block_size>20000</kafka_max_block_size>
-                    <kafka_num_consumers>1</kafka_num_consumers>
+                    <kafka_num_consumers>2</kafka_num_consumers>
                     <kafka>
                         <security_protocol>SSL</security_protocol>
                         <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
@@ -82,16 +82,16 @@ spec:
                         <auto_offset_reset>latest</auto_offset_reset>
                     </kafka>
                 </kafka_regional>
-                <kafka_global>
+                <kafka_global_stream>
                     <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
-                    <kafka_topic_list>flights-global</kafka_topic_list>
-                    <kafka_group_name>clickhouse-lab-global-eks</kafka_group_name>
+                    <kafka_topic_list>positions-global-stream</kafka_topic_list>
+                    <kafka_group_name>clickhouse-eks-global-stream</kafka_group_name>
                     <kafka_format>JSONEachRow</kafka_format>
                     <kafka_skip_broken_messages>50</kafka_skip_broken_messages>
                     <kafka_poll_timeout_ms>100</kafka_poll_timeout_ms>
                     <kafka_flush_interval_ms>10000</kafka_flush_interval_ms>
                     <kafka_max_block_size>65000</kafka_max_block_size>
-                    <kafka_num_consumers>1</kafka_num_consumers>
+                    <kafka_num_consumers>3</kafka_num_consumers>
                     <kafka>
                         <security_protocol>SSL</security_protocol>
                         <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
@@ -102,7 +102,28 @@ spec:
                         <heartbeat_interval_ms>3000</heartbeat_interval_ms>
                         <auto_offset_reset>latest</auto_offset_reset>
                     </kafka>
-                </kafka_global>
+                </kafka_global_stream>
+                <kafka_global_opensky>
+                    <kafka_broker_list>lab.url:30192,lab.url:30193</kafka_broker_list>
+                    <kafka_topic_list>positions-global-opensky</kafka_topic_list>
+                    <kafka_group_name>clickhouse-eks-global-opensky</kafka_group_name>
+                    <kafka_format>JSONEachRow</kafka_format>
+                    <kafka_skip_broken_messages>50</kafka_skip_broken_messages>
+                    <kafka_poll_timeout_ms>100</kafka_poll_timeout_ms>
+                    <kafka_flush_interval_ms>10000</kafka_flush_interval_ms>
+                    <kafka_max_block_size>65000</kafka_max_block_size>
+                    <kafka_num_consumers>2</kafka_num_consumers>
+                    <kafka>
+                        <security_protocol>SSL</security_protocol>
+                        <ssl_ca_location>/etc/clickhouse-kafka-tls/ca.crt</ssl_ca_location>
+                        <ssl_certificate_location>/etc/clickhouse-kafka-tls/client.crt</ssl_certificate_location>
+                        <ssl_key_location>/etc/clickhouse-kafka-tls/client.key</ssl_key_location>
+                        <session_timeout_ms>60000</session_timeout_ms>
+                        <max_poll_interval_ms>300000</max_poll_interval_ms>
+                        <heartbeat_interval_ms>3000</heartbeat_interval_ms>
+                        <auto_offset_reset>latest</auto_offset_reset>
+                    </kafka>
+                </kafka_global_opensky>
             </named_collections>
         </clickhouse>
 

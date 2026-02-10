@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 7,
   "links": [],
   "panels": [
     {
@@ -171,9 +171,9 @@
           "allLayers": false,
           "id": "coords",
           "lastOnly": false,
-          "lat": <LATITUDE>,
+          "lat": 39.23444,
           "layer": "Receiver",
-          "lon": <LONGITUDE>,
+          "lon": -77.34185,
           "noRepeat": true,
           "shared": true,
           "zoom": 4
@@ -198,9 +198,9 @@
               "table": ""
             }
           },
-          "pluginVersion": "4.12.0",
+          "pluginVersion": "4.13.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed,\r\n    registration,\r\n    aircraft_type\r\nFROM adsb.positions_global_latest\r\nWHERE ground_speed > 0\r\nORDER BY alt_baro ASC",
+          "rawSql": "SELECT\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    scrape_time,\r\n    callsign,\r\n    alt_baro,\r\n    track,\r\n    ground_speed,\r\n    vertical_rate,\r\n    origin_country\r\nFROM adsb.positions_global_opensky_latest\r\nWHERE ground_speed > 0\r\nORDER BY alt_baro ASC",
           "refId": "Positions"
         }
       ],
@@ -209,7 +209,7 @@
     }
   ],
   "preload": false,
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 42,
   "tags": [],
   "templating": {
@@ -221,7 +221,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Current Positions: Global",
-  "uid": "as34as",
-  "version": 14
+  "title": "Current Positions: Global (Opensky)",
+  "uid": "s34adsf",
+  "version": 4
 }

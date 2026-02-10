@@ -11,21 +11,18 @@ Review procedures in ./docs/KAFKA_CERTS.md
 Copy manifests/adsb-kafka/10-secrets.yaml.example to manifests/adsb-kafka/10-secrets.yaml
 and populate with base64-encoded values (from step 1)
 
-### 3. Configure Collectors
-Copy manifests/adsb-collectors/10-configmap.yaml.example manifests/adsb-collectors/10-configmap.yaml
-and edit as appropriate for your location
-
-Key values to update:
-- `LOCAL_URL`: Your local ADS-B receiver endpoint
-- `REGIONAL_URL`: Customize lat/lon/radius for your location
-- `KAFKA_BROKERS`: Should be correct as-is for k3s
-
 ### 4. Customize manifests
 ./manifests/adsb-kafka/30-kafka-single.yaml.example
 or
 ./manifests/adsb-kafka/30-kafka-pair.yaml.example
   - copy to 30-kafka-(single|pair).yaml
   - replace instances of "lab.url" to the correct url for your kafka cluster
+
+./manifests/adsb-collectors/30-scrapers.yaml.example
+  - copy to 30-scrapers.yaml
+  - enable or disable individual scraper deployments by setting replicas to 1 (default) or 0 (disabled)
+  - in the Regional Scraper section, replace <LAT> and <LON> in SOURCE_URL to reflect your receiver coordinates
+  - update POLL_INTERVAL for scrapers as desired
 
 ### 5. Apply lables to Nodes (optional)
 We can steer workloads to nodes using a combination of preferred scheduling and taints/tolerations.
@@ -56,32 +53,42 @@ docker save adsb-scraper:latest | sudo k3s ctr images import -
 
 ### Deploy Kafka Stack
 ```bash
-# 1. Create namespace
-kubectl apply -f manifests/adsb-kafka/00-namespace.yaml
-
-# 2. Create secrets (your customized file)
+# 1. Create secrets (your customized file)
 kubectl apply -f manifests/adsb-kafka/10-secrets.yaml
 
-# 3. Deploy Zookeeper and wait for it to be ready
+# 2. Deploy Zookeeper and wait for it to be ready
 kubectl apply -f manifests/adsb-kafka/20-zookeeper.yaml
 kubectl -n adsb-kafka wait --for=condition=ready pod -l app=zookeeper --timeout=300s
 
-# 4. Deploy Kafka and wait for it to be ready
+# 3. Deploy Kafka and wait for it to be ready
 kubectl apply -f manifests/adsb-kafka/30-kafka.yaml
 kubectl -n adsb-kafka wait --for=condition=ready pod -l app=kafka --timeout=300s
 ```
 
-### Deploy Scrapers
+### Deploy Collectors
 ```bash
-# 1. Create namespace
-kubectl apply -f manifests/adsb-collectors/00-namespace.yaml
-
-# 2. Create ConfigMap (your customized file)
+# 1. Create ConfigMap (your customized file)
 kubectl apply -f manifests/adsb-collectors/10-configmap.yaml
 
-# 3. Deploy all scrapers
-kubectl apply -f manifests/adsb-collectors/20-deployments.yaml
+# 2. Deploy readsb streamers
+kubectl apply -f manifests/adsb-collectors/20-readsb-adsbhub-client.yaml
+kubectl apply -f manifests/adsb-collectors/25-readsb-adsblol-client.yaml
+
+# 3. Deploy scrapers
+kubectl apply -f manifests/adsb-collectors/30-scrapers.yaml
+kubectl get pods -o wide -n adsb-collectors
 ```
+If the namespace deletion is stuck waiting for a resource which has already been deleted, manually delete it.  Example:
+```
+NamespaceDeletionDiscoveryFailure            True    Mon, 09 Feb 2026 17:23:08 -0500  DiscoveryFailed         Discovery failed for some groups, 1 failing: unable to retrieve the complete list of server APIs: metrics.k8s.io/v1beta1: stale GroupVersion discovery: metrics.k8s.io/v1beta1
+
+kubectl get apiservice v1beta1.metrics.k8s.io
+NAME                     SERVICE                      AVAILABLE                  AGE
+v1beta1.metrics.k8s.io   kube-system/metrics-server   False (MissingEndpoints)   30d
+
+kubectl delete apiservice v1beta1.metrics.k8s.io
+```
+
 
 ## Verification
 

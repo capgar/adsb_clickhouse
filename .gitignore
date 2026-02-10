@@ -4,14 +4,13 @@ certs/**
 
 # Environment-specific manifests
 manifests/adsb-clickhouse/10-secrets-kafka-tls.yaml
-manifests/adsb-clickhouse/20-keeper-*.yaml
-!manifests/adsb-clickhouse/20-keeper-eks.yaml
 manifests/adsb-clickhouse/30-clickhouse*.yaml
+manifests/adsb-collectors/30-scrapers.yaml
 manifests/adsb-kafka/10-secrets.yaml
 manifests/adsb-kafka/30-kafka*.yaml
+manifests/adsb-kafka/40-kafka-topic-config.yaml
 manifests/adsb-monitoring/20-grafana-config.yaml
 manifests/adsb-monitoring/10-grafana-config-eks.yaml
-manifests/adsb-collectors/10-configmap.yaml
 
 # Environment-specific schema files
 schema/users*.sql
@@ -39,6 +38,7 @@ Thumbs.db
 # Working
 working/**
 temp/**
+test/**
 old/**
 *.old
 

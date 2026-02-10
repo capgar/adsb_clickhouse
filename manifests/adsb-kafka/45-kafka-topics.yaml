@@ -1,0 +1,187 @@
+# Kafka Topic Creation Job - ConfigMap Based
+#
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-create-topics
+  namespace: adsb-kafka
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  
+  template:
+    spec:
+      restartPolicy: OnFailure
+      
+      initContainers:
+        # Download Kafka in init container
+        - name: download-kafka
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Downloading Kafka..."
+              apk add --no-cache wget tar
+              cd /opt
+              wget -q https://archive.apache.org/dist/kafka/3.9.0/kafka_2.13-3.9.0.tgz
+              tar -xzf kafka_2.13-3.9.0.tgz
+              mv kafka_2.13-3.9.0 kafka
+              rm kafka_2.13-3.9.0.tgz
+              echo "Kafka downloaded to /opt/kafka"
+          volumeMounts:
+            - name: kafka-bin
+              mountPath: /opt
+      
+      containers:
+        - name: create-topics
+          image: alpine:3.19
+          
+          volumeMounts:
+            - name: topic-config
+              mountPath: /config
+              readOnly: true
+            - name: kafka-bin
+              mountPath: /opt
+          
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              
+              # Install required packages
+              apk add --no-cache bash openjdk17-jre jq
+              
+              BOOTSTRAP_SERVER="kafka-0-0.kafka-headless.adsb-kafka.svc.cluster.local:9092"
+              CONFIG_FILE="/config/topics.json"
+              KAFKA_BIN="/opt/kafka/bin"
+              
+              echo "Waiting for Kafka cluster to be ready..."
+              for i in $(seq 1 60); do
+                if $KAFKA_BIN/kafka-broker-api-versions.sh --bootstrap-server $BOOTSTRAP_SERVER >/dev/null 2>&1; then
+                  BROKER_COUNT=$($KAFKA_BIN/kafka-broker-api-versions.sh --bootstrap-server $BOOTSTRAP_SERVER 2>/dev/null | grep -c "id: " || echo 0)
+                  echo "Attempt $i: Found $BROKER_COUNT broker(s)"
+                  
+                  if [ "$BROKER_COUNT" -ge 2 ]; then
+                    echo "Kafka cluster ready with $BROKER_COUNT brokers"
+                    break
+                  fi
+                fi
+                
+                if [ $i -eq 60 ]; then
+                  echo "ERROR: Timeout waiting for Kafka cluster"
+                  exit 1
+                fi
+                
+                sleep 5
+              done
+              
+              echo ""
+              echo "Reading topic configuration from ConfigMap..."
+              
+              # Read defaults from JSON
+              DEFAULT_RF=$(jq -r '.defaults.replication_factor' $CONFIG_FILE)
+              DEFAULT_RETENTION_MS=$(jq -r '.defaults.retention_ms' $CONFIG_FILE)
+              DEFAULT_RETENTION_BYTES=$(jq -r '.defaults.retention_bytes' $CONFIG_FILE)
+              DEFAULT_COMPRESSION=$(jq -r '.defaults.compression_type' $CONFIG_FILE)
+              DEFAULT_MIN_ISR=$(jq -r '.defaults.min_insync_replicas' $CONFIG_FILE)
+              
+              echo "Default configuration:"
+              echo "  Replication Factor: $DEFAULT_RF"
+              echo "  Retention Time: $DEFAULT_RETENTION_MS ms"
+              echo "  Retention Size: $DEFAULT_RETENTION_BYTES bytes"
+              echo "  Compression: $DEFAULT_COMPRESSION"
+              echo "  Min In-Sync Replicas: $DEFAULT_MIN_ISR"
+              echo ""
+              
+              # Get number of topics
+              TOPIC_COUNT=$(jq -r '.topics | length' $CONFIG_FILE)
+              echo "Found $TOPIC_COUNT topic(s) to create"
+              echo ""
+              
+              # Process each topic
+              SUCCESS=0
+              SKIPPED=0
+              FAILED=0
+              
+              for i in $(seq 0 $((TOPIC_COUNT - 1))); do
+                # Extract topic configuration
+                TOPIC_NAME=$(jq -r ".topics[$i].name" $CONFIG_FILE)
+                TOPIC_DESC=$(jq -r ".topics[$i].description // \"\"" $CONFIG_FILE)
+                PARTITIONS=$(jq -r ".topics[$i].partitions" $CONFIG_FILE)
+                
+                # Use topic-specific values or fall back to defaults
+                RF=$(jq -r ".topics[$i].replication_factor // $DEFAULT_RF" $CONFIG_FILE)
+                RETENTION_MS=$(jq -r ".topics[$i].retention_ms // $DEFAULT_RETENTION_MS" $CONFIG_FILE)
+                RETENTION_BYTES=$(jq -r ".topics[$i].retention_bytes // $DEFAULT_RETENTION_BYTES" $CONFIG_FILE)
+                COMPRESSION=$(jq -r ".topics[$i].compression_type // \"$DEFAULT_COMPRESSION\"" $CONFIG_FILE)
+                MIN_ISR=$(jq -r ".topics[$i].min_insync_replicas // $DEFAULT_MIN_ISR" $CONFIG_FILE)
+                
+                echo "[$((i+1))/$TOPIC_COUNT] Topic: $TOPIC_NAME"
+                if [ -n "$TOPIC_DESC" ]; then
+                  echo "  Description: $TOPIC_DESC"
+                fi
+                echo "  Partitions: $PARTITIONS"
+                echo "  Replication Factor: $RF"
+                echo "  Retention: ${RETENTION_MS}ms / ${RETENTION_BYTES} bytes"
+                echo "  Compression: $COMPRESSION, Min ISR: $MIN_ISR"
+                
+                # Create the topic
+                OUTPUT=$($KAFKA_BIN/kafka-topics.sh \
+                  --bootstrap-server $BOOTSTRAP_SERVER \
+                  --create \
+                  --if-not-exists \
+                  --topic $TOPIC_NAME \
+                  --partitions $PARTITIONS \
+                  --replication-factor $RF \
+                  --config retention.ms=$RETENTION_MS \
+                  --config retention.bytes=$RETENTION_BYTES \
+                  --config compression.type=$COMPRESSION \
+                  --config min.insync.replicas=$MIN_ISR 2>&1 || true)
+                
+                if echo "$OUTPUT" | grep -q "Created topic"; then
+                  echo "  Created successfully"
+                  SUCCESS=$((SUCCESS + 1))
+                elif echo "$OUTPUT" | grep -q "already exists"; then
+                  echo "  Already exists (skipped)"
+                  SKIPPED=$((SKIPPED + 1))
+                else
+                  echo "  Failed: $OUTPUT"
+                  FAILED=$((FAILED + 1))
+                fi
+                echo ""
+              done
+              
+              echo "========================================"
+              echo "Summary:"
+              echo "  Created: $SUCCESS"
+              echo "  Already existing: $SKIPPED"
+              echo "  Failed: $FAILED"
+              echo "========================================"
+              
+              if [ $FAILED -gt 0 ]; then
+                echo ""
+                echo "Some topics failed to create"
+                exit 1
+              fi
+              
+              echo ""
+              echo "Listing all topics:"
+              $KAFKA_BIN/kafka-topics.sh --bootstrap-server $BOOTSTRAP_SERVER --list
+              
+              echo ""
+              echo "Topic details:"
+              $KAFKA_BIN/kafka-topics.sh --bootstrap-server $BOOTSTRAP_SERVER --describe
+              
+              echo ""
+              echo "All topics created successfully"
+      
+      volumes:
+        - name: topic-config
+          configMap:
+            name: kafka-topic-config
+        - name: kafka-bin
+          emptyDir: {}

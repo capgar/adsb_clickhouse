@@ -42,31 +42,3 @@ data:
           username: adsb_query
         secureJsonData:
           password: <PASSWORD>
----          
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-provider
-  namespace: adsb-monitoring
-data:
-  dashboards.yaml: |
-    apiVersion: 1
-    providers:
-      - name: 'ClickHouse Monitoring'
-        orgId: 1
-        folder: 'ClickHouse'
-        type: file
-        disableDeletion: false
-        updateIntervalSeconds: 30
-        allowUiUpdates: true
-        options:
-          path: /var/lib/grafana/dashboards/clickhouse
-      - name: 'ADS-B Dashboards'
-        orgId: 1
-        folder: 'ADS-B'
-        type: file
-        disableDeletion: false
-        updateIntervalSeconds: 30
-        allowUiUpdates: true
-        options:
-          path: /var/lib/grafana/dashboards/adsb

@@ -319,7 +319,7 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    scrape_time as time,\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    alt_baro\r\nFROM adsb.positions_local\r\nWHERE $__timeFilter(time)\r\nORDER BY time ASC",
+          "rawSql": "SELECT\r\n    scrape_time as time,\r\n    icao24,\r\n    lat,\r\n    lon,\r\n    alt_baro\r\nFROM adsb.positions_local_dist\r\nWHERE $__timeFilter(time)\r\nORDER BY time ASC",
           "refId": "pos_past"
         },
         {
@@ -342,7 +342,7 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT \r\n    now() as t,\r\n    39.23444 AS lat,\r\n    -77.34185 AS lon,\r\n    'Receiver' AS label",
+          "rawSql": "SELECT \r\n    now() as t,\r\n    <LATITUDE> AS lat,\r\n    <LONGITUDE> AS lon,\r\n    'Receiver' AS label",
           "refId": "local"
         }
       ],
@@ -523,7 +523,7 @@
           },
           "pluginVersion": "4.12.0",
           "queryType": "table",
-          "rawSql": "SELECT\r\n    range_distance as Distance,\r\n    range_direction as Direction,\r\n    callsign as Callsign,\r\n    alt_baro as Altitude,\r\n    ground_speed as Knots,\r\n    track as Heading,\r\n    registration as Registration,\r\n    aircraft_type as Type,\r\n    description as Description\r\nFROM adsb.positions_local_latest\r\nORDER BY Distance asc",
+          "rawSql": "SELECT\r\n    distance as Distance,\r\n    direction as Direction,\r\n    callsign as Callsign,\r\n    alt_baro as Altitude,\r\n    ground_speed as Knots,\r\n    track as Heading,\r\n    registration as Registration,\r\n    aircraft_type as Type,\r\n    description as Description\r\nFROM adsb.positions_local_latest\r\nORDER BY Distance asc",
           "refId": "A"
         }
       ],

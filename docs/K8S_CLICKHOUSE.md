@@ -54,8 +54,9 @@ Some of the manifests require configuration for your environment
 
 ### 5. Customize dashboards
 ./dashboards/examples/
-  - If using the example map dashboards, copy the 3 .json files to ../adsb/
-  - in the Global and Local files, replace <LATITUDE> and <LONGITUDE> with the latitude and longitude values for your ADS-B receiver
+  - If using the example map dashboards, copy the json files from ./dashboards/examples to ./dashboards/adsb/
+  - in the Local and Regional files, replace <LATITUDE> and <LONGITUDE> with the latitude and longitude values for your local location
+    (either your ADS-B receiver for Local, or the center of your API query for Regional)
 
 
 ### Deploy ClickHouse Stack
@@ -80,7 +81,8 @@ kubectl get pods -n adsb-clickhouse -w
 # 6. Install DB schema and users
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-local.sql
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-regional.sql
-clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-global.sql
+clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-global-stream.sql
+clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/schema-global-opensky.sql
 clickhouse-client --host <host> --user admin --password clickhouse123 --port 30900 --multiquery < schema/users.sql
 ```
 
@@ -90,7 +92,7 @@ clickhouse-client --host <host> --user admin --password clickhouse123 --port 309
 # 1. Install Prometheus CRDs
 ./scripts/prometheus-crds.sh
 
-# 2. Create namespace
+# 2. Create namespace0  
 kubectl apply -f manifests/adsb-monitoring/00-namespace.yaml
 
 # 3. Install Prometheus Operator and wait for it to be ready
@@ -119,6 +121,9 @@ kubectl apply -f manifests/adsb-monitoring/20-grafana-config.yaml
 # 8. Deploy Grafana
 kubectl apply -f manifests/adsb-monitoring/25-grafana-local.yaml
 kubectl get pods -o wide -n adsb-monitoring -w
+
+# 9. Restart Clickhouse Operator
+kubectl rollout restart deployment clickhouse-operator -n kube-system
 ```
 
 
@@ -155,3 +160,43 @@ kubectl delete namespace $NAMESPACE
 
 echo "Cleanup complete"
 ```
+
+If namespace still will not delete, look for additional 
+```bash
+kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get --show-kind --ignore-not-found -n adsb-clickhouse
+kubectl describe namespace adsb-clickhouse
+```
+
+
+
+
+## Troubleshooting Metrics
+
+### Check Prometheus Targets
+Connect to Prometheus:
+kubectl port-forward -n adsb-monitoring svc/prometheus 9090:9090
+
+Open http://localhost:9090/targets
+You should see targets for:
+- clickhouse-keeper (:9234)
+- clickhouse-servers (:9363)
+- clickhouse-operator (:8888)
+- clickhouse-operator (:9999)
+
+### Check ClickHouse Operator metrics
+kubectl port-forward -n kube-system svc/clickhouse-operator-metrics 8888:8888
+curl localhost:8888/metrics
+
+kubectl port-forward -n kube-system svc/clickhouse-operator-metrics 9999:9999
+curl localhost:9999/metrics
+
+### Check Keeper metrics
+kubectl port-forward -n adsb-clickhouse svc/adsb-keeper-headless 9234:9234
+curl localhost:9234/metrics
+
+### Check ClickHouse Server metrics
+port-forward -n adsb-clickhouse svc/clickhouse-adsb-data 9363:9363
+curl localhost:9363/metrics
+
+### Restart ClickHouse Operator
+kubectl rollout restart deployment clickhouse-operator -n kube-system
